@@ -16,6 +16,7 @@ import java.util.Set;
  * validates the model, and generates SDL, DataFetchers, and a schema registry.
  */
 @SupportedAnnotationTypes({
+        "com.moltenbits.gasp.annotation.GraphQLType",
         "com.moltenbits.gasp.annotation.GraphQLApi",
         "com.moltenbits.gasp.annotation.GraphQLQuery",
         "com.moltenbits.gasp.annotation.GraphQLMutation",
@@ -50,8 +51,9 @@ public class GaspProcessor extends AbstractProcessor {
             return true; // errors emitted, stop
         }
 
-        // Skip generation if no operations found
-        if (model.queries().isEmpty() && model.mutations().isEmpty() && model.subscriptions().isEmpty()) {
+        // Skip generation if nothing to generate
+        if (model.types().isEmpty() && model.enums().isEmpty()
+                && model.queries().isEmpty() && model.mutations().isEmpty() && model.subscriptions().isEmpty()) {
             return true;
         }
 

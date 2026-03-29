@@ -46,6 +46,16 @@ public class SdlGenerator {
             sdl.append("}\n\n");
         }
 
+        // Object types
+        for (ObjectTypeModel type : model.types()) {
+            sdl.append("type ").append(type.graphQLName()).append(" {\n");
+            for (FieldModel field : type.fields()) {
+                sdl.append("  ").append(field.graphQLName()).append(": ")
+                        .append(renderTypeRef(field.type(), customScalars)).append("\n");
+            }
+            sdl.append("}\n\n");
+        }
+
         // Enum types
         for (EnumTypeModel enumType : model.enums()) {
             sdl.append("enum ").append(enumType.graphQLName()).append(" {\n");

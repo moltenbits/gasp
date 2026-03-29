@@ -72,8 +72,8 @@ class ModelSpec extends Specification {
 
     def "OperationModel can be constructed with arguments"() {
         given:
-        def arg1 = new ArgumentModel("id", "id", new GraphQLTypeRef.NonNull(new GraphQLTypeRef.Scalar("ID")), null)
-        def arg2 = new ArgumentModel("name", "name", new GraphQLTypeRef.Scalar("String"), "\"default\"")
+        def arg1 = new ArgumentModel("id", "id", "java.lang.Long", new GraphQLTypeRef.NonNull(new GraphQLTypeRef.Scalar("ID")), null)
+        def arg2 = new ArgumentModel("name", "name", "java.lang.String", new GraphQLTypeRef.Scalar("String"), "\"default\"")
 
         when:
         def op = new OperationModel(
@@ -113,7 +113,7 @@ class ModelSpec extends Specification {
         GraphQLTypeRef.EnumRef  | new GraphQLTypeRef.EnumRef("Status").toString()                                                      | "Status"
         GraphQLTypeRef.ListOf   | new GraphQLTypeRef.ListOf(new GraphQLTypeRef.Scalar("Int")).toString()                                | "Int"
         GraphQLTypeRef.NonNull  | new GraphQLTypeRef.NonNull(new GraphQLTypeRef.Scalar("ID")).toString()                                | "ID"
-        ArgumentModel           | new ArgumentModel("limit", "limit", new GraphQLTypeRef.Scalar("Int"), "10").toString()                | "limit"
+        ArgumentModel           | new ArgumentModel("limit", "limit", "int", new GraphQLTypeRef.Scalar("Int"), "10").toString()                | "limit"
         FieldModel              | new FieldModel("email", "email", new GraphQLTypeRef.Scalar("String"), true, false, "Email").toString()| "email"
         ObjectTypeModel         | new ObjectTypeModel("User", "com.example.User", "A user", []).toString()                             | "User"
         EnumTypeModel           | new EnumTypeModel("Status", "com.example.Status", ["ACTIVE", "INACTIVE"]).toString()                  | "ACTIVE"

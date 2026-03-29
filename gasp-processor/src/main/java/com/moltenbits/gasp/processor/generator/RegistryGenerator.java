@@ -26,12 +26,15 @@ public class RegistryGenerator {
         StringBuilder sb = new StringBuilder();
         sb.append("package ").append(GENERATED_PACKAGE).append(";\n\n");
         sb.append("import graphql.schema.DataFetcher;\n");
+        sb.append("import graphql.schema.GraphQLSchema;\n");
         sb.append("import com.moltenbits.gasp.runtime.SchemaLoader;\n");
-        sb.append("import graphql.schema.GraphQLSchema;\n\n");
+        sb.append("import com.moltenbits.gasp.runtime.SchemaProvider;\n");
+        sb.append("import jakarta.inject.Singleton;\n\n");
         sb.append("import java.util.LinkedHashMap;\n");
         sb.append("import java.util.Map;\n\n");
         sb.append("/**\n * Generated schema registry. Wires all DataFetchers to the GraphQL schema.\n */\n");
-        sb.append("public final class GaspSchemaRegistry {\n\n");
+        sb.append("@Singleton\n");
+        sb.append("public final class GaspSchemaRegistry implements SchemaProvider {\n\n");
 
         sb.append("    private final Map<String, DataFetcher<?>> queryFetchers = new LinkedHashMap<>();\n");
         sb.append("    private final Map<String, DataFetcher<?>> mutationFetchers = new LinkedHashMap<>();\n");
@@ -61,6 +64,7 @@ public class RegistryGenerator {
         sb.append("    }\n\n");
 
         // buildSchema method
+        sb.append("    @Override\n");
         sb.append("    public GraphQLSchema buildSchema() {\n");
         sb.append("        return SchemaLoader.load(queryFetchers, mutationFetchers, typeFetchers);\n");
         sb.append("    }\n\n");

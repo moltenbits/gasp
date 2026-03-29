@@ -9,6 +9,7 @@ import javax.annotation.processing.Filer;
 import javax.tools.JavaFileObject;
 import java.io.IOException;
 import java.io.Writer;
+import java.util.Set;
 
 /**
  * Generates DataFetcher implementation classes for each operation.
@@ -37,8 +38,10 @@ public class DataFetcherGenerator {
         sb.append("package ").append(GENERATED_PACKAGE).append(";\n\n");
         sb.append("import graphql.schema.DataFetcher;\n");
         sb.append("import graphql.schema.DataFetchingEnvironment;\n");
+        sb.append("import jakarta.inject.Singleton;\n");
         sb.append("import ").append(op.serviceClass()).append(";\n\n");
         sb.append("/**\n * Generated DataFetcher for ").append(op.graphQLName()).append(".\n */\n");
+        sb.append("@Singleton\n");
         sb.append("public class ").append(className)
                 .append(" implements DataFetcher<Object> {\n\n");
 
@@ -57,8 +60,8 @@ public class DataFetcherGenerator {
 
         // Extract arguments
         for (ArgumentModel arg : op.arguments()) {
-            String javaType = javaTypeForArg(arg.type());
-            String extraction = extractionExpr(arg.graphQLName(), arg.type());
+            String javaType = simpleClassName(arg.javaType());
+            String extraction = extractionExpr(arg.graphQLName(), arg.javaType());
             sb.append("        ").append(javaType).append(" ").append(arg.javaName())
                     .append(" = ").append(extraction).append(";\n");
         }
@@ -96,33 +99,31 @@ public class DataFetcherGenerator {
         return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
     }
 
-    private String javaTypeForArg(GraphQLTypeRef type) {
-        if (type == null) return "Object";
-        return switch (type) {
-            case GraphQLTypeRef.NonNull n -> javaTypeForArg(n.inner());
-            case GraphQLTypeRef.Scalar s -> switch (s.name()) {
-                case "String" -> "String";
-                case "Int" -> "Integer";
-                case "Float" -> "Double";
-                case "Boolean" -> "Boolean";
-                case "ID" -> "String";
-                default -> "Object";
-            };
-            default -> "Object";
-        };
-    }
+    private static final Set<String> NUMERIC_TYPES = Set.of(
+            "int", "java.lang.Integer",
+            "long", "java.lang.Long",
+            "short", "java.lang.Short",
+            "byte", "java.lang.Byte",
+            "float", "java.lang.Float",
+            "double", "java.lang.Double",
+            "java.math.BigInteger", "java.math.BigDecimal"
+    );
 
-    private String extractionExpr(String argName, GraphQLTypeRef type) {
+    private String extractionExpr(String argName, String javaType) {
         String baseExpr = "env.getArgument(\"" + argName + "\")";
-        if (type == null) return baseExpr;
-
-        GraphQLTypeRef unwrapped = type instanceof GraphQLTypeRef.NonNull n ? n.inner() : type;
-        if (unwrapped instanceof GraphQLTypeRef.Scalar s) {
-            return switch (s.name()) {
-                case "Int" -> "env.<Number>getArgument(\"" + argName + "\") != null ? env.<Number>getArgument(\"" + argName + "\").intValue() : null";
-                case "Float" -> "env.<Number>getArgument(\"" + argName + "\") != null ? env.<Number>getArgument(\"" + argName + "\").doubleValue() : null";
-                default -> baseExpr;
+        if (NUMERIC_TYPES.contains(javaType)) {
+            String conversion = switch (javaType) {
+                case "int", "java.lang.Integer" -> "intValue()";
+                case "long", "java.lang.Long" -> "longValue()";
+                case "short", "java.lang.Short" -> "shortValue()";
+                case "byte", "java.lang.Byte" -> "byteValue()";
+                case "float", "java.lang.Float" -> "floatValue()";
+                case "double", "java.lang.Double" -> "doubleValue()";
+                default -> null;
             };
+            if (conversion != null) {
+                return "env.<Number>getArgument(\"" + argName + "\") != null ? env.<Number>getArgument(\"" + argName + "\")." + conversion + " : null";
+            }
         }
         return baseExpr;
     }

@@ -29,10 +29,19 @@ public class Collector {
     }
 
     public SchemaModel collect(RoundEnvironment roundEnv) {
+        List<ObjectTypeModel> objectTypes = new ArrayList<>();
         List<OperationModel> queries = new ArrayList<>();
         List<OperationModel> mutations = new ArrayList<>();
         List<OperationModel> subscriptions = new ArrayList<>();
 
+        // Collect @GraphQLType classes
+        for (Element element : roundEnv.getElementsAnnotatedWith(GraphQLType.class)) {
+            if (element.getKind() != ElementKind.CLASS && element.getKind() != ElementKind.RECORD) continue;
+            TypeElement typeElement = (TypeElement) element;
+            objectTypes.add(buildObjectType(typeElement));
+        }
+
+        // Collect @GraphQLApi operations
         for (Element element : roundEnv.getElementsAnnotatedWith(GraphQLApi.class)) {
             if (element.getKind() != ElementKind.CLASS) continue;
             TypeElement serviceElement = (TypeElement) element;
@@ -62,12 +71,111 @@ public class Collector {
         }
 
         return new SchemaModel(
-                List.of(),  // types — populated in Phase 2
+                objectTypes,
                 new ArrayList<>(enums),
                 queries,
                 mutations,
                 subscriptions
         );
+    }
+
+    private ObjectTypeModel buildObjectType(TypeElement typeElement) {
+        GraphQLType ann = typeElement.getAnnotation(GraphQLType.class);
+        String graphQLName = (ann != null && !ann.name().isEmpty())
+                ? ann.name()
+                : typeElement.getSimpleName().toString();
+        String description = (ann != null) ? ann.description() : "";
+
+        List<FieldModel> fields = new ArrayList<>();
+
+        for (Element enclosed : typeElement.getEnclosedElements()) {
+            // Skip ignored fields
+            if (enclosed.getAnnotation(GraphQLIgnore.class) != null) continue;
+
+            if (enclosed.getKind() == ElementKind.METHOD) {
+                ExecutableElement method = (ExecutableElement) enclosed;
+                String methodName = method.getSimpleName().toString();
+
+                // Only include getter-style methods (getX/isX, no args, non-void)
+                if (method.getParameters().isEmpty()
+                        && method.getReturnType().getKind() != javax.lang.model.type.TypeKind.VOID
+                        && !method.getModifiers().contains(Modifier.STATIC)) {
+
+                    String fieldName = extractFieldName(methodName);
+                    if (fieldName == null) continue;
+
+                    // Check for @GraphQLField override
+                    GraphQLField fieldAnn = method.getAnnotation(GraphQLField.class);
+                    if (fieldAnn != null && !fieldAnn.name().isEmpty()) {
+                        fieldName = fieldAnn.name();
+                    }
+                    String fieldDesc = (fieldAnn != null) ? fieldAnn.description() : "";
+
+                    GraphQLTypeRef typeRef = typeResolver.resolve(method.getReturnType(), method);
+                    if (typeRef == null) continue;
+
+                    boolean isRelation = enclosed.getAnnotation(GraphQLRelation.class) != null;
+
+                    fields.add(new FieldModel(fieldName, methodName, typeRef, true, isRelation, fieldDesc));
+                }
+            } else if (enclosed.getKind() == ElementKind.FIELD
+                    && enclosed.getModifiers().contains(Modifier.PUBLIC)
+                    && !enclosed.getModifiers().contains(Modifier.STATIC)) {
+
+                VariableElement field = (VariableElement) enclosed;
+                String fieldName = field.getSimpleName().toString();
+
+                GraphQLField fieldAnn = field.getAnnotation(GraphQLField.class);
+                if (fieldAnn != null && !fieldAnn.name().isEmpty()) {
+                    fieldName = fieldAnn.name();
+                }
+                String fieldDesc = (fieldAnn != null) ? fieldAnn.description() : "";
+
+                GraphQLTypeRef typeRef = typeResolver.resolve(field.asType(), field);
+                if (typeRef == null) continue;
+
+                boolean isRelation = field.getAnnotation(GraphQLRelation.class) != null;
+
+                fields.add(new FieldModel(fieldName, field.getSimpleName().toString(), typeRef, true, isRelation, fieldDesc));
+            } else if (enclosed.getKind() == ElementKind.RECORD_COMPONENT) {
+                // Record components
+                var component = (javax.lang.model.element.RecordComponentElement) enclosed;
+                String fieldName = component.getSimpleName().toString();
+
+                GraphQLField fieldAnn = component.getAnnotation(GraphQLField.class);
+                if (fieldAnn != null && !fieldAnn.name().isEmpty()) {
+                    fieldName = fieldAnn.name();
+                }
+                String fieldDesc = (fieldAnn != null) ? fieldAnn.description() : "";
+
+                GraphQLTypeRef typeRef = typeResolver.resolve(component.asType(), component);
+                if (typeRef == null) continue;
+
+                boolean isRelation = component.getAnnotation(GraphQLRelation.class) != null;
+
+                fields.add(new FieldModel(fieldName, component.getSimpleName().toString(), typeRef, true, isRelation, fieldDesc));
+            }
+        }
+
+        return new ObjectTypeModel(graphQLName, typeElement.getQualifiedName().toString(), description, fields);
+    }
+
+    /**
+     * Extract a field name from a getter method name.
+     * "getTitle" → "title", "isActive" → "active", "name" → "name"
+     */
+    private static String extractFieldName(String methodName) {
+        if (methodName.startsWith("get") && methodName.length() > 3 && Character.isUpperCase(methodName.charAt(3))) {
+            return Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
+        }
+        if (methodName.startsWith("is") && methodName.length() > 2 && Character.isUpperCase(methodName.charAt(2))) {
+            return Character.toLowerCase(methodName.charAt(2)) + methodName.substring(3);
+        }
+        // Skip common Object methods
+        if (methodName.equals("toString") || methodName.equals("hashCode") || methodName.equals("getClass")) {
+            return null;
+        }
+        return null;
     }
 
     private static final String DATA_FETCHING_ENVIRONMENT = "graphql.schema.DataFetchingEnvironment";
@@ -105,8 +213,11 @@ public class Collector {
             GraphQLTypeRef argType = typeResolver.resolve(param.asType(), param);
             trackEnums(argType, param.asType());
 
+            // Strip TYPE_USE annotations from the type string (e.g. "@NonNull java.lang.String" → "java.lang.String")
+            String cleanParamType = param.asType().toString().replaceAll("@\\S+\\s+", "").trim();
+
             arguments.add(new ArgumentModel(argName, param.getSimpleName().toString(),
-                    argType, argDefault));
+                    cleanParamType, argType, argDefault));
         }
 
         return new OperationModel(kind, graphQLName, description, returnType,
