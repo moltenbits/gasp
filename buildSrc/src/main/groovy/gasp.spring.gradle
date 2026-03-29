@@ -1,3 +1,48 @@
-// Placeholder — will be implemented when gasp-spring module is built
-// Will apply Spring Boot plugin, configure gasp-spring dependencies,
-// and set up test infrastructure.
+plugins {
+    id 'java'
+    id 'groovy'
+    id 'org.springframework.boot'
+}
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+
+dependencies {
+    implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+
+    annotationProcessor project(':gasp-processor')
+
+    implementation project(':gasp-annotations')
+    implementation project(':gasp-spring')
+    implementation 'org.springframework.boot:spring-boot-starter-graphql'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'jakarta.inject:jakarta.inject-api'
+
+    testImplementation platform(libs.groovy.bom)
+    testImplementation platform(libs.spock.bom)
+    testImplementation libs.spock.core
+    testImplementation 'org.spockframework:spock-spring'
+    testImplementation libs.groovy.all
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework:spring-webflux'
+    testImplementation 'org.springframework.graphql:spring-graphql-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(Test) {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}

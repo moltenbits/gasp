@@ -38,9 +38,11 @@ public class DataFetcherGenerator {
         sb.append("package ").append(GENERATED_PACKAGE).append(";\n\n");
         sb.append("import graphql.schema.DataFetcher;\n");
         sb.append("import graphql.schema.DataFetchingEnvironment;\n");
+        sb.append("import jakarta.inject.Named;\n");
         sb.append("import jakarta.inject.Singleton;\n");
         sb.append("import ").append(op.serviceClass()).append(";\n\n");
         sb.append("/**\n * Generated DataFetcher for ").append(op.graphQLName()).append(".\n */\n");
+        sb.append("@Named\n");
         sb.append("@Singleton\n");
         sb.append("public class ").append(className)
                 .append(" implements DataFetcher<Object> {\n\n");
