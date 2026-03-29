@@ -8,6 +8,8 @@ jakarta-persistence = "3.2.0"
 micronaut-data = "5.0.0-M5"
 micronaut-graphql = "5.0.0-M1"
 micronaut-gradle = "5.0.0-M1"
+spring-boot = "4.0.5"
+spring-graphql = "2.0.2"
 logback = "1.5.18"
 
 [libraries]
@@ -21,3 +23,4 @@ jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 jakarta-persistence-api = { module = "jakarta.persistence:jakarta.persistence-api", version.ref = "jakarta-persistence" }
 micronaut-data-model = { module = "io.micronaut.data:micronaut-data-model", version.ref = "micronaut-data" }
 micronaut-graphql = { module = "io.micronaut.graphql:micronaut-graphql", version.ref = "micronaut-graphql" }
+spring-graphql = { module = "org.springframework.graphql:spring-graphql", version.ref = "spring-graphql" }

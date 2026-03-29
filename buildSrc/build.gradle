@@ -9,4 +9,5 @@ repositories {
 
 dependencies {
     implementation "io.micronaut.gradle:micronaut-gradle-plugin:${libs.versions.micronaut.gradle.get()}"
+    implementation "org.springframework.boot:spring-boot-gradle-plugin:${libs.versions.spring.boot.get()}"
 }
