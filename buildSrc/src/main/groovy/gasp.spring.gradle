@@ -1,0 +1,3 @@
+// Placeholder — will be implemented when gasp-spring module is built
+// Will apply Spring Boot plugin, configure gasp-spring dependencies,
+// and set up test infrastructure.

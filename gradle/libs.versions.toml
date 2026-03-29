@@ -1,0 +1,23 @@
+[versions]
+graphql-java = "25.0"
+compile-testing = "0.21.0"
+spock = "2.4-groovy-5.0"
+groovy = "5.0.4"
+jspecify = "1.0.0"
+jakarta-persistence = "3.2.0"
+micronaut-data = "5.0.0-M5"
+micronaut-graphql = "5.0.0-M1"
+micronaut-gradle = "5.0.0-M1"
+logback = "1.5.18"
+
+[libraries]
+graphql-java = { module = "com.graphql-java:graphql-java", version.ref = "graphql-java" }
+compile-testing = { module = "com.google.testing.compile:compile-testing", version.ref = "compile-testing" }
+spock-bom = { module = "org.spockframework:spock-bom", version.ref = "spock" }
+spock-core = { module = "org.spockframework:spock-core" }
+groovy-bom = { module = "org.apache.groovy:groovy-bom", version.ref = "groovy" }
+groovy-all = { module = "org.apache.groovy:groovy-all", version.ref = "groovy" }
+jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+jakarta-persistence-api = { module = "jakarta.persistence:jakarta.persistence-api", version.ref = "jakarta-persistence" }
+micronaut-data-model = { module = "io.micronaut.data:micronaut-data-model", version.ref = "micronaut-data" }
+micronaut-graphql = { module = "io.micronaut.graphql:micronaut-graphql", version.ref = "micronaut-graphql" }

@@ -1,0 +1,11 @@
+micronaut:
+  application:
+    name: gasp-micronaut-example
+  server:
+    port: 8080
+
+graphql:
+  enabled: true
+  path: /graphql
+  graphiql:
+    enabled: true

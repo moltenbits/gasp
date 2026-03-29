@@ -1,0 +1,41 @@
+plugins {
+    id 'java-library'
+    id 'groovy'
+}
+
+group = 'com.moltenbits.gasp'
+version = '0.1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+}
+
+dependencies {
+    testImplementation platform(libs.groovy.bom)
+    testImplementation platform(libs.spock.bom)
+    testImplementation libs.spock.core
+    testImplementation libs.groovy.all
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(Test) {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showStandardStreams = false
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
+tasks.withType(AbstractTestTask).configureEach {
+    failOnNoDiscoveredTests = false
+}

@@ -1,0 +1,10 @@
+type Query {
+  hello: String
+  today: Date
+}
+
+type Mutation {
+  setMessage(msg: String): String
+}
+
+scalar Date
