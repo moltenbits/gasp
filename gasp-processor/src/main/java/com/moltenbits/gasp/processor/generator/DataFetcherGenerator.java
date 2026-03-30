@@ -4,6 +4,7 @@ import com.moltenbits.gasp.processor.model.ArgumentModel;
 import com.moltenbits.gasp.processor.model.GraphQLTypeRef;
 import com.moltenbits.gasp.processor.model.OperationModel;
 import com.moltenbits.gasp.processor.model.SchemaModel;
+import com.moltenbits.gasp.processor.model.TypeFetcherModel;
 
 import javax.annotation.processing.Filer;
 import javax.tools.JavaFileObject;
@@ -28,6 +29,9 @@ public class DataFetcherGenerator {
         for (OperationModel op : model.subscriptions()) {
             generateFetcher(op, filer);
         }
+        for (TypeFetcherModel tf : model.typeFetchers()) {
+            generateTypeFetcher(tf, filer);
+        }
     }
 
     private void generateFetcher(OperationModel op, Filer filer) throws IOException {
@@ -40,7 +44,16 @@ public class DataFetcherGenerator {
         sb.append("import graphql.schema.DataFetchingEnvironment;\n");
         sb.append("import jakarta.inject.Named;\n");
         sb.append("import jakarta.inject.Singleton;\n");
-        sb.append("import ").append(op.serviceClass()).append(";\n\n");
+        sb.append("import ").append(op.serviceClass()).append(";\n");
+
+        // Import argument types that are not in java.lang
+        for (ArgumentModel arg : op.arguments()) {
+            if (arg.javaType() != null && arg.javaType().contains(".") && !arg.javaType().startsWith("java.lang.")) {
+                sb.append("import ").append(arg.javaType()).append(";\n");
+            }
+        }
+
+        sb.append("\n");
         sb.append("/**\n * Generated DataFetcher for ").append(op.graphQLName()).append(".\n */\n");
         sb.append("@Named\n");
         sb.append("@Singleton\n");
@@ -63,7 +76,7 @@ public class DataFetcherGenerator {
         // Extract arguments
         for (ArgumentModel arg : op.arguments()) {
             String javaType = simpleClassName(arg.javaType());
-            String extraction = extractionExpr(arg.graphQLName(), arg.javaType());
+            String extraction = extractionExpr(arg.graphQLName(), arg.javaType(), arg.type());
             sb.append("        ").append(javaType).append(" ").append(arg.javaName())
                     .append(" = ").append(extraction).append(";\n");
         }
@@ -90,10 +103,62 @@ public class DataFetcherGenerator {
         }
     }
 
+    private void generateTypeFetcher(TypeFetcherModel tf, Filer filer) throws IOException {
+        String className = typeFetcherClassName(tf);
+        String serviceSimpleName = simpleClassName(tf.serviceClass());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("package ").append(GENERATED_PACKAGE).append(";\n\n");
+        sb.append("import graphql.schema.DataFetcher;\n");
+        sb.append("import graphql.schema.DataFetchingEnvironment;\n");
+        sb.append("import jakarta.inject.Named;\n");
+        sb.append("import jakarta.inject.Singleton;\n");
+        sb.append("import ").append(tf.serviceClass()).append(";\n\n");
+        sb.append("/**\n * Generated type-level DataFetcher for ").append(tf.parentTypeName())
+                .append(".").append(tf.fieldName()).append(".\n */\n");
+        sb.append("@Named\n");
+        sb.append("@Singleton\n");
+        sb.append("public class ").append(className)
+                .append(" implements DataFetcher<Object> {\n\n");
+
+        // Field
+        sb.append("    private final ").append(serviceSimpleName).append(" service;\n\n");
+
+        // Constructor
+        sb.append("    public ").append(className).append("(")
+                .append(serviceSimpleName).append(" service) {\n");
+        sb.append("        this.service = service;\n");
+        sb.append("    }\n\n");
+
+        // get() method
+        sb.append("    @Override\n");
+        sb.append("    public Object get(DataFetchingEnvironment env) throws Exception {\n");
+        sb.append("        Object source = env.getSource();\n");
+
+        if (tf.envParameterIndex() >= 0) {
+            sb.append("        return service.").append(tf.methodName()).append("(source, env);\n");
+        } else {
+            sb.append("        return service.").append(tf.methodName()).append("(source);\n");
+        }
+
+        sb.append("    }\n");
+        sb.append("}\n");
+
+        JavaFileObject file = filer.createSourceFile(GENERATED_PACKAGE + "." + className);
+        try (Writer writer = file.openWriter()) {
+            writer.write(sb.toString());
+        }
+    }
+
     public static String fetcherClassName(OperationModel op) {
         String serviceSimple = simpleClassName(op.serviceClass());
         String capitalizedName = op.graphQLName().substring(0, 1).toUpperCase() + op.graphQLName().substring(1);
         return serviceSimple + "_" + capitalizedName + "Fetcher";
+    }
+
+    public static String typeFetcherClassName(TypeFetcherModel tf) {
+        String capitalizedField = tf.fieldName().substring(0, 1).toUpperCase() + tf.fieldName().substring(1);
+        return tf.parentTypeName() + "_" + capitalizedField + "Fetcher";
     }
 
     private static String simpleClassName(String qualifiedName) {
@@ -111,8 +176,20 @@ public class DataFetcherGenerator {
             "java.math.BigInteger", "java.math.BigDecimal"
     );
 
-    private String extractionExpr(String argName, String javaType) {
+    private String extractionExpr(String argName, String javaType, GraphQLTypeRef typeRef) {
         String baseExpr = "env.getArgument(\"" + argName + "\")";
+
+        // Enum arguments: graphql-java delivers enum values as strings
+        GraphQLTypeRef unwrapped = typeRef;
+        if (unwrapped instanceof GraphQLTypeRef.NonNull nn) {
+            unwrapped = nn.inner();
+        }
+        if (unwrapped instanceof GraphQLTypeRef.EnumRef) {
+            String simpleType = simpleClassName(javaType);
+            return "env.<String>getArgument(\"" + argName + "\") != null ? "
+                    + simpleType + ".valueOf(env.<String>getArgument(\"" + argName + "\")) : null";
+        }
+
         if (NUMERIC_TYPES.contains(javaType)) {
             String conversion = switch (javaType) {
                 case "int", "java.lang.Integer" -> "intValue()";

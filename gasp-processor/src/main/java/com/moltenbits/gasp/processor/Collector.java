@@ -5,6 +5,8 @@ import com.moltenbits.gasp.processor.model.*;
 
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.element.*;
+import javax.lang.model.type.MirroredTypeException;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import java.util.ArrayList;
@@ -30,6 +32,9 @@ public class Collector {
 
     public SchemaModel collect(RoundEnvironment roundEnv) {
         List<ObjectTypeModel> objectTypes = new ArrayList<>();
+        List<InputTypeModel> inputTypes = new ArrayList<>();
+        List<InterfaceTypeModel> interfaceTypes = new ArrayList<>();
+        List<TypeFetcherModel> typeFetchers = new ArrayList<>();
         List<OperationModel> queries = new ArrayList<>();
         List<OperationModel> mutations = new ArrayList<>();
         List<OperationModel> subscriptions = new ArrayList<>();
@@ -39,6 +44,96 @@ public class Collector {
             if (element.getKind() != ElementKind.CLASS && element.getKind() != ElementKind.RECORD) continue;
             TypeElement typeElement = (TypeElement) element;
             objectTypes.add(buildObjectType(typeElement));
+        }
+
+        // Collect @GraphQLInputType classes
+        for (Element element : roundEnv.getElementsAnnotatedWith(GraphQLInputType.class)) {
+            if (element.getKind() != ElementKind.CLASS && element.getKind() != ElementKind.RECORD) continue;
+            TypeElement typeElement = (TypeElement) element;
+            GraphQLInputType ann = typeElement.getAnnotation(GraphQLInputType.class);
+            String graphQLName = (ann != null && !ann.name().isEmpty())
+                    ? ann.name()
+                    : typeElement.getSimpleName().toString();
+            String description = (ann != null) ? ann.description() : "";
+            List<FieldModel> fields = scanFields(typeElement);
+            inputTypes.add(new InputTypeModel(graphQLName, typeElement.getQualifiedName().toString(), description, fields));
+        }
+
+        // Collect @GraphQLInterface classes/interfaces
+        for (Element element : roundEnv.getElementsAnnotatedWith(GraphQLInterface.class)) {
+            if (element.getKind() != ElementKind.CLASS && element.getKind() != ElementKind.INTERFACE) continue;
+            TypeElement typeElement = (TypeElement) element;
+            GraphQLInterface ann = typeElement.getAnnotation(GraphQLInterface.class);
+            String graphQLName = (ann != null && !ann.name().isEmpty())
+                    ? ann.name()
+                    : typeElement.getSimpleName().toString();
+            List<FieldModel> fields = scanFields(typeElement);
+            interfaceTypes.add(new InterfaceTypeModel(graphQLName, typeElement.getQualifiedName().toString(), "", fields));
+        }
+
+        // Collect @GraphQLEnum enums
+        for (Element element : roundEnv.getElementsAnnotatedWith(GraphQLEnum.class)) {
+            if (element.getKind() != ElementKind.ENUM) continue;
+            TypeElement typeElement = (TypeElement) element;
+            GraphQLEnum ann = typeElement.getAnnotation(GraphQLEnum.class);
+            String graphQLName = (ann != null && !ann.name().isEmpty())
+                    ? ann.name()
+                    : typeElement.getSimpleName().toString();
+            List<String> values = typeElement.getEnclosedElements().stream()
+                    .filter(e -> e.getKind() == ElementKind.ENUM_CONSTANT)
+                    .map(e -> e.getSimpleName().toString())
+                    .toList();
+            enums.add(new EnumTypeModel(graphQLName, typeElement.getQualifiedName().toString(), values));
+        }
+
+        // Collect @GraphQLField(on=...) methods from any class (type-level fetchers)
+        for (Element element : roundEnv.getElementsAnnotatedWith(GraphQLField.class)) {
+            if (element.getKind() != ElementKind.METHOD) continue;
+            ExecutableElement method = (ExecutableElement) element;
+            GraphQLField fieldAnn = method.getAnnotation(GraphQLField.class);
+            if (fieldAnn == null || !hasOnAttribute(fieldAnn)) continue;
+
+            // Get the parent type name from the on() attribute
+            String parentTypeName;
+            try {
+                Class<?> onClass = fieldAnn.on();
+                parentTypeName = onClass.getSimpleName();
+            } catch (MirroredTypeException mte) {
+                TypeMirror typeMirror = mte.getTypeMirror();
+                TypeElement te = (TypeElement) types.asElement(typeMirror);
+                // Use the GraphQLType name if present
+                GraphQLType gqlType = te.getAnnotation(GraphQLType.class);
+                if (gqlType != null && !gqlType.name().isEmpty()) {
+                    parentTypeName = gqlType.name();
+                } else {
+                    parentTypeName = te.getSimpleName().toString();
+                }
+            }
+
+            String fieldName = (!fieldAnn.name().isEmpty())
+                    ? fieldAnn.name()
+                    : method.getSimpleName().toString();
+
+            TypeElement serviceElement = (TypeElement) method.getEnclosingElement();
+            String serviceClass = serviceElement.getQualifiedName().toString();
+
+            GraphQLTypeRef returnType = typeResolver.resolve(method.getReturnType(), method);
+            trackEnums(returnType, method.getReturnType());
+
+            int envParameterIndex = -1;
+            int paramIndex = 0;
+            for (VariableElement param : method.getParameters()) {
+                String paramType = param.asType().toString();
+                if (paramType.equals(DATA_FETCHING_ENVIRONMENT)) {
+                    envParameterIndex = paramIndex;
+                }
+                paramIndex++;
+            }
+
+            typeFetchers.add(new TypeFetcherModel(
+                    parentTypeName, fieldName, serviceClass, method.getSimpleName().toString(),
+                    returnType, envParameterIndex
+            ));
         }
 
         // Collect @GraphQLApi operations
@@ -72,20 +167,34 @@ public class Collector {
 
         return new SchemaModel(
                 objectTypes,
+                inputTypes,
+                interfaceTypes,
                 new ArrayList<>(enums),
                 queries,
                 mutations,
-                subscriptions
+                subscriptions,
+                typeFetchers
         );
     }
 
-    private ObjectTypeModel buildObjectType(TypeElement typeElement) {
-        GraphQLType ann = typeElement.getAnnotation(GraphQLType.class);
-        String graphQLName = (ann != null && !ann.name().isEmpty())
-                ? ann.name()
-                : typeElement.getSimpleName().toString();
-        String description = (ann != null) ? ann.description() : "";
+    /**
+     * Check if a @GraphQLField annotation has a non-void on() attribute.
+     */
+    private boolean hasOnAttribute(GraphQLField fieldAnn) {
+        try {
+            Class<?> onClass = fieldAnn.on();
+            return onClass != void.class;
+        } catch (MirroredTypeException mte) {
+            TypeMirror typeMirror = mte.getTypeMirror();
+            return !typeMirror.toString().equals("void");
+        }
+    }
 
+    /**
+     * Scan fields from a TypeElement (shared between object types, input types, and interfaces).
+     * Skips methods that have @GraphQLField with a non-void on() attribute (type-level fetchers).
+     */
+    private List<FieldModel> scanFields(TypeElement typeElement) {
         List<FieldModel> fields = new ArrayList<>();
 
         for (Element enclosed : typeElement.getEnclosedElements()) {
@@ -96,6 +205,10 @@ public class Collector {
                 ExecutableElement method = (ExecutableElement) enclosed;
                 String methodName = method.getSimpleName().toString();
 
+                // Skip methods with @GraphQLField(on=...) — those are type-level fetchers
+                GraphQLField fieldAnn = method.getAnnotation(GraphQLField.class);
+                if (fieldAnn != null && hasOnAttribute(fieldAnn)) continue;
+
                 // Only include getter-style methods (getX/isX, no args, non-void)
                 if (method.getParameters().isEmpty()
                         && method.getReturnType().getKind() != javax.lang.model.type.TypeKind.VOID
@@ -105,7 +218,6 @@ public class Collector {
                     if (fieldName == null) continue;
 
                     // Check for @GraphQLField override
-                    GraphQLField fieldAnn = method.getAnnotation(GraphQLField.class);
                     if (fieldAnn != null && !fieldAnn.name().isEmpty()) {
                         fieldName = fieldAnn.name();
                     }
@@ -157,12 +269,24 @@ public class Collector {
             }
         }
 
+        return fields;
+    }
+
+    private ObjectTypeModel buildObjectType(TypeElement typeElement) {
+        GraphQLType ann = typeElement.getAnnotation(GraphQLType.class);
+        String graphQLName = (ann != null && !ann.name().isEmpty())
+                ? ann.name()
+                : typeElement.getSimpleName().toString();
+        String description = (ann != null) ? ann.description() : "";
+
+        List<FieldModel> fields = scanFields(typeElement);
+
         return new ObjectTypeModel(graphQLName, typeElement.getQualifiedName().toString(), description, fields);
     }
 
     /**
      * Extract a field name from a getter method name.
-     * "getTitle" → "title", "isActive" → "active", "name" → "name"
+     * "getTitle" -> "title", "isActive" -> "active", "name" -> "name"
      */
     private static String extractFieldName(String methodName) {
         if (methodName.startsWith("get") && methodName.length() > 3 && Character.isUpperCase(methodName.charAt(3))) {
@@ -213,7 +337,7 @@ public class Collector {
             GraphQLTypeRef argType = typeResolver.resolve(param.asType(), param);
             trackEnums(argType, param.asType());
 
-            // Strip TYPE_USE annotations from the type string (e.g. "@NonNull java.lang.String" → "java.lang.String")
+            // Strip TYPE_USE annotations from the type string (e.g. "@NonNull java.lang.String" -> "java.lang.String")
             String cleanParamType = param.asType().toString().replaceAll("@\\S+\\s+", "").trim();
 
             arguments.add(new ArgumentModel(argName, param.getSimpleName().toString(),

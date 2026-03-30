@@ -58,7 +58,7 @@ class ModelSpec extends Specification {
 
     def "SchemaModel can be constructed with empty lists"() {
         when:
-        def schema = new SchemaModel([], [], [], [], [])
+        def schema = new SchemaModel([], [], [], [], [], [], [], [])
 
         then:
         schema.types() == []
@@ -118,6 +118,6 @@ class ModelSpec extends Specification {
         ObjectTypeModel         | new ObjectTypeModel("User", "com.example.User", "A user", []).toString()                             | "User"
         EnumTypeModel           | new EnumTypeModel("Status", "com.example.Status", ["ACTIVE", "INACTIVE"]).toString()                  | "ACTIVE"
         OperationModel          | new OperationModel(OperationKind.MUTATION, "createUser", "Create", new GraphQLTypeRef.ObjectRef("User"), "Svc", "create", [], -1).toString() | "createUser"
-        SchemaModel             | new SchemaModel([], [], [], [], []).toString()                                                        | "SchemaModel"
+        SchemaModel             | new SchemaModel([], [], [], [], [], [], [], []).toString()                                                        | "SchemaModel"
     }
 }

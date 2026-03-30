@@ -171,6 +171,14 @@ public class TypeResolver {
             return maybeNonNull(new GraphQLTypeRef.EnumRef(typeElement.getSimpleName().toString()), annotatedElement, type);
         }
 
+        // Check @GraphQLInputType-annotated classes → InputRef
+        if (typeElement.getAnnotation(com.moltenbits.gasp.annotation.GraphQLInputType.class) != null) {
+            String name = typeElement.getSimpleName().toString();
+            var ann = typeElement.getAnnotation(com.moltenbits.gasp.annotation.GraphQLInputType.class);
+            if (ann != null && !ann.name().isEmpty()) name = ann.name();
+            return maybeNonNull(new GraphQLTypeRef.InputRef(name), annotatedElement, type);
+        }
+
         // Check @GraphQLType-annotated classes (or any class → ObjectRef)
         if (typeElement.getAnnotation(GraphQLType.class) != null || isKnownEntityType(typeElement)) {
             String name = typeElement.getSimpleName().toString();

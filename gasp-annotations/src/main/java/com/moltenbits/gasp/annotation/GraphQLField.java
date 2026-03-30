@@ -21,4 +21,10 @@ public @interface GraphQLField {
     boolean deprecated() default false;
 
     String deprecationReason() default "";
+
+    /**
+     * When set to a non-void class, wires this method as a type-level fetcher on the
+     * specified GraphQL object type rather than treating it as an entity field.
+     */
+    Class<?> on() default void.class;
 }

@@ -88,21 +88,86 @@ class BookServiceSpec extends Specification {
 
     def "createBook mutation adds a book and returns it"() {
         when:
-        def result = graphql('mutation { createBook(title: "Dune", authorName: "Frank Herbert") { id title author { name } } }')
+        def result = graphql('mutation { createBook(title: "Dune", authorName: "Frank Herbert", genre: SCIENCE_FICTION) { id title author { name } genre } }')
 
         then:
         result.data.createBook.title == "Dune"
         result.data.createBook.author.name == "Frank Herbert"
+        result.data.createBook.genre == "SCIENCE_FICTION"
         result.data.createBook.id != null
+    }
+
+    def "createBook mutation with enum defaults when genre omitted"() {
+        when:
+        def result = graphql('mutation { createBook(title: "Sapiens", authorName: "Yuval Harari") { title genre } }')
+
+        then:
+        result.data.createBook.title == "Sapiens"
+        result.data.createBook.genre == "FICTION"
     }
 
     def "createBook mutation is visible in subsequent books query"() {
         when:
-        graphql('mutation { createBook(title: "Neuromancer", authorName: "William Gibson") { id } }')
+        graphql('mutation { createBook(title: "Neuromancer", authorName: "William Gibson", genre: SCIENCE_FICTION) { id } }')
         def result = graphql('{ books { title } }')
 
         then:
         result.data.books*.title.contains("Neuromancer")
+    }
+
+    // --- Enum: booksByGenre ---
+
+    def "booksByGenre query filters by enum value"() {
+        when:
+        def result = graphql('{ booksByGenre(genre: FANTASY) { title genre } }')
+        then:
+        result.data.booksByGenre.size() == 2
+        result.data.booksByGenre*.title.containsAll(["The Hobbit", "The Lord of the Rings"])
+        result.data.booksByGenre.every { it.genre == "FANTASY" }
+    }
+
+    def "booksByGenre returns empty list for genre with no books"() {
+        when:
+        def result = graphql('{ booksByGenre(genre: MYSTERY) { title } }')
+        then:
+        result.data.booksByGenre.size() == 0
+    }
+
+    def "book query returns genre field"() {
+        when:
+        def result = graphql('{ book(id: 1) { title genre } }')
+        then:
+        result.data.book.genre == "FANTASY"
+    }
+
+    // --- Type-level fetcher: recommendations ---
+
+    def "book has recommendations from type-level fetcher"() {
+        when:
+        def result = graphql('{ book(id: 1) { title recommendations { title author { name } } } }')
+        then:
+        result.data.book.title == "The Hobbit"
+        result.data.book.recommendations.size() == 1
+        result.data.book.recommendations[0].title == "The Name of the Wind"
+        result.data.book.recommendations[0].author.name == "Patrick Rothfuss"
+    }
+
+    def "book with no recommendations returns empty list"() {
+        when:
+        def result = graphql('{ book(id: 2) { title recommendations { title } } }')
+        then:
+        result.data.book.title == "1984"
+        result.data.book.recommendations.size() == 0
+    }
+
+    // --- Interface: Searchable ---
+
+    def "book has description field from Searchable interface"() {
+        when:
+        def result = graphql('{ book(id: 1) { title description } }')
+        then:
+        result.data.book.title == "The Hobbit"
+        result.data.book.description == "A hobbit's adventure"
     }
 
     // --- Schema validation ---

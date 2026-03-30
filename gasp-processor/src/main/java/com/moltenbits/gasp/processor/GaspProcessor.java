@@ -20,7 +20,11 @@ import java.util.Set;
         "com.moltenbits.gasp.annotation.GraphQLApi",
         "com.moltenbits.gasp.annotation.GraphQLQuery",
         "com.moltenbits.gasp.annotation.GraphQLMutation",
-        "com.moltenbits.gasp.annotation.GraphQLSubscription"
+        "com.moltenbits.gasp.annotation.GraphQLSubscription",
+        "com.moltenbits.gasp.annotation.GraphQLInputType",
+        "com.moltenbits.gasp.annotation.GraphQLInterface",
+        "com.moltenbits.gasp.annotation.GraphQLEnum",
+        "com.moltenbits.gasp.annotation.GraphQLField"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class GaspProcessor extends AbstractProcessor {
@@ -52,7 +56,8 @@ public class GaspProcessor extends AbstractProcessor {
         }
 
         // Skip generation if nothing to generate
-        if (model.types().isEmpty() && model.enums().isEmpty()
+        if (model.types().isEmpty() && model.inputTypes().isEmpty() && model.interfaces().isEmpty()
+                && model.enums().isEmpty()
                 && model.queries().isEmpty() && model.mutations().isEmpty() && model.subscriptions().isEmpty()) {
             return true;
         }

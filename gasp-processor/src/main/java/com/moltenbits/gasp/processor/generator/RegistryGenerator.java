@@ -2,6 +2,7 @@ package com.moltenbits.gasp.processor.generator;
 
 import com.moltenbits.gasp.processor.model.OperationModel;
 import com.moltenbits.gasp.processor.model.SchemaModel;
+import com.moltenbits.gasp.processor.model.TypeFetcherModel;
 
 import javax.annotation.processing.Filer;
 import javax.tools.JavaFileObject;
@@ -44,12 +45,22 @@ public class RegistryGenerator {
 
         // Constructor
         sb.append("    public GaspSchemaRegistry(\n");
-        for (int i = 0; i < allOps.size(); i++) {
-            OperationModel op = allOps.get(i);
+        int totalParams = allOps.size() + model.typeFetchers().size();
+        int paramIdx = 0;
+        for (OperationModel op : allOps) {
             String fetcherClass = DataFetcherGenerator.fetcherClassName(op);
             String paramName = toLowerCamelCase(fetcherClass);
             sb.append("            ").append(fetcherClass).append(" ").append(paramName);
-            if (i < allOps.size() - 1) sb.append(",");
+            paramIdx++;
+            if (paramIdx < totalParams) sb.append(",");
+            sb.append("\n");
+        }
+        for (TypeFetcherModel tf : model.typeFetchers()) {
+            String fetcherClass = DataFetcherGenerator.typeFetcherClassName(tf);
+            String paramName = toLowerCamelCase(fetcherClass);
+            sb.append("            ").append(fetcherClass).append(" ").append(paramName);
+            paramIdx++;
+            if (paramIdx < totalParams) sb.append(",");
             sb.append("\n");
         }
         sb.append("    ) {\n");
@@ -61,6 +72,12 @@ public class RegistryGenerator {
         for (OperationModel op : model.mutations()) {
             String paramName = toLowerCamelCase(DataFetcherGenerator.fetcherClassName(op));
             sb.append("        mutationFetchers.put(\"").append(op.graphQLName()).append("\", ").append(paramName).append(");\n");
+        }
+        for (TypeFetcherModel tf : model.typeFetchers()) {
+            String paramName = toLowerCamelCase(DataFetcherGenerator.typeFetcherClassName(tf));
+            sb.append("        typeFetchers.computeIfAbsent(\"").append(tf.parentTypeName())
+                    .append("\", k -> new LinkedHashMap<>()).put(\"").append(tf.fieldName())
+                    .append("\", ").append(paramName).append(");\n");
         }
 
         sb.append("    }\n\n");

@@ -2,6 +2,7 @@ package com.example.service;
 
 import com.example.model.Author;
 import com.example.model.Book;
+import com.example.model.Genre;
 import com.moltenbits.gasp.annotation.GraphQLApi;
 import com.moltenbits.gasp.annotation.GraphQLArgument;
 import com.moltenbits.gasp.annotation.GraphQLMutation;
@@ -22,9 +23,9 @@ public class BookService {
     public BookService() {
         var tolkien = new Author(1L, "J.R.R. Tolkien");
         var orwell = new Author(2L, "George Orwell");
-        books.add(new Book(idCounter.getAndIncrement(), "The Hobbit", tolkien));
-        books.add(new Book(idCounter.getAndIncrement(), "1984", orwell));
-        books.add(new Book(idCounter.getAndIncrement(), "The Lord of the Rings", tolkien));
+        books.add(new Book(idCounter.getAndIncrement(), "The Hobbit", "A hobbit's adventure", tolkien, Genre.FANTASY));
+        books.add(new Book(idCounter.getAndIncrement(), "1984", "A dystopian novel", orwell, Genre.FICTION));
+        books.add(new Book(idCounter.getAndIncrement(), "The Lord of the Rings", "An epic fantasy", tolkien, Genre.FANTASY));
     }
 
     @GraphQLQuery
@@ -40,13 +41,22 @@ public class BookService {
         return List.copyOf(books);
     }
 
+    @GraphQLQuery
+    public List<Book> booksByGenre(@GraphQLArgument(name = "genre") Genre genre) {
+        return books.stream()
+                .filter(b -> b.getGenre() == genre)
+                .toList();
+    }
+
     @GraphQLMutation
     public Book createBook(
             @GraphQLArgument(name = "title") String title,
-            @GraphQLArgument(name = "authorName") String authorName
+            @GraphQLArgument(name = "authorName") String authorName,
+            @GraphQLArgument(name = "genre") Genre genre
     ) {
         var author = new Author(idCounter.getAndIncrement(), authorName);
-        var book = new Book(idCounter.getAndIncrement(), title, author);
+        var effectiveGenre = genre != null ? genre : Genre.FICTION;
+        var book = new Book(idCounter.getAndIncrement(), title, "", author, effectiveGenre);
         books.add(book);
         return book;
     }
