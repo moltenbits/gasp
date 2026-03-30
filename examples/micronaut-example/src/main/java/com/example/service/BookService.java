@@ -2,6 +2,7 @@ package com.example.service;
 
 import com.example.model.Author;
 import com.example.model.Book;
+import com.example.model.BookInput;
 import com.example.model.Genre;
 import com.moltenbits.gasp.annotation.GraphQLApi;
 import com.moltenbits.gasp.annotation.GraphQLArgument;
@@ -49,14 +50,10 @@ public class BookService {
     }
 
     @GraphQLMutation
-    public Book createBook(
-            @GraphQLArgument(name = "title") String title,
-            @GraphQLArgument(name = "authorName") String authorName,
-            @GraphQLArgument(name = "genre") Genre genre
-    ) {
-        var author = new Author(idCounter.getAndIncrement(), authorName);
-        var effectiveGenre = genre != null ? genre : Genre.FICTION;
-        var book = new Book(idCounter.getAndIncrement(), title, "", author, effectiveGenre);
+    public Book createBook(@GraphQLArgument(name = "input") BookInput input) {
+        var author = new Author(idCounter.getAndIncrement(), input.getAuthorName());
+        var genre = input.getGenre() != null ? input.getGenre() : Genre.FICTION;
+        var book = new Book(idCounter.getAndIncrement(), input.getTitle(), "", author, genre);
         books.add(book);
         return book;
     }

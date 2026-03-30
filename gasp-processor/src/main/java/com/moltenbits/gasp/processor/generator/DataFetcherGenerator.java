@@ -51,6 +51,11 @@ public class DataFetcherGenerator {
             if (arg.javaType() != null && arg.javaType().contains(".") && !arg.javaType().startsWith("java.lang.")) {
                 sb.append("import ").append(arg.javaType()).append(";\n");
             }
+            // Import generated converter for input types
+            GraphQLTypeRef unwrapped = arg.type() instanceof GraphQLTypeRef.NonNull n ? n.inner() : arg.type();
+            if (unwrapped instanceof GraphQLTypeRef.InputRef inputRef) {
+                sb.append("import java.util.Map;\n");
+            }
         }
 
         sb.append("\n");
@@ -179,11 +184,18 @@ public class DataFetcherGenerator {
     private String extractionExpr(String argName, String javaType, GraphQLTypeRef typeRef) {
         String baseExpr = "env.getArgument(\"" + argName + "\")";
 
-        // Enum arguments: graphql-java delivers enum values as strings
         GraphQLTypeRef unwrapped = typeRef;
         if (unwrapped instanceof GraphQLTypeRef.NonNull nn) {
             unwrapped = nn.inner();
         }
+
+        // Input type arguments: graphql-java delivers as Map, use generated converter
+        if (unwrapped instanceof GraphQLTypeRef.InputRef) {
+            String simpleType = simpleClassName(javaType);
+            return simpleType + "Converter.fromMap(env.getArgument(\"" + argName + "\"))";
+        }
+
+        // Enum arguments: graphql-java delivers enum values as strings
         if (unwrapped instanceof GraphQLTypeRef.EnumRef) {
             String simpleType = simpleClassName(javaType);
             return "env.<String>getArgument(\"" + argName + "\") != null ? "

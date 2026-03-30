@@ -1,6 +1,7 @@
 package com.moltenbits.gasp.processor;
 
 import com.moltenbits.gasp.processor.generator.DataFetcherGenerator;
+import com.moltenbits.gasp.processor.generator.InputConverterGenerator;
 import com.moltenbits.gasp.processor.generator.RegistryGenerator;
 import com.moltenbits.gasp.processor.generator.SdlGenerator;
 import com.moltenbits.gasp.processor.model.SchemaModel;
@@ -66,6 +67,7 @@ public class GaspProcessor extends AbstractProcessor {
             Filer filer = processingEnv.getFiler();
             new SdlGenerator().generate(model, filer);
             new DataFetcherGenerator().generate(model, filer);
+            new InputConverterGenerator().generate(model, filer);
             new RegistryGenerator().generate(model, filer);
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(

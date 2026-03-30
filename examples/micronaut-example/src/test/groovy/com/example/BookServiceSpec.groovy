@@ -84,9 +84,9 @@ class BookServiceSpec extends Specification {
 
     // --- Mutation: createBook ---
 
-    def "createBook mutation adds a book and returns it"() {
+    def "createBook mutation with input type adds a book"() {
         when:
-        def result = graphql('mutation { createBook(title: "Dune", authorName: "Frank Herbert", genre: SCIENCE_FICTION) { id title author { name } genre } }')
+        def result = graphql('mutation { createBook(input: { title: "Dune", authorName: "Frank Herbert", genre: SCIENCE_FICTION }) { id title author { name } genre } }')
 
         then:
         result.data.createBook.title == "Dune"
@@ -95,9 +95,9 @@ class BookServiceSpec extends Specification {
         result.data.createBook.id != null
     }
 
-    def "createBook mutation with enum defaults when genre omitted"() {
+    def "createBook mutation with input type defaults genre when omitted"() {
         when:
-        def result = graphql('mutation { createBook(title: "Sapiens", authorName: "Yuval Harari") { title genre } }')
+        def result = graphql('mutation { createBook(input: { title: "Sapiens", authorName: "Yuval Harari" }) { title genre } }')
 
         then:
         result.data.createBook.title == "Sapiens"
@@ -106,7 +106,7 @@ class BookServiceSpec extends Specification {
 
     def "createBook mutation is visible in subsequent books query"() {
         when:
-        graphql('mutation { createBook(title: "Neuromancer", authorName: "William Gibson", genre: SCIENCE_FICTION) { id } }')
+        graphql('mutation { createBook(input: { title: "Neuromancer", authorName: "William Gibson", genre: SCIENCE_FICTION }) { id } }')
         def result = graphql('{ books { title } }')
 
         then:
