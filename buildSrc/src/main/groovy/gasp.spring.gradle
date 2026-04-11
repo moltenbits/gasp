@@ -24,6 +24,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-graphql'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'jakarta.inject:jakarta.inject-api'
+    implementation libs.jspecify
 
     testImplementation platform(libs.groovy.bom)
     testImplementation platform(libs.spock.bom)

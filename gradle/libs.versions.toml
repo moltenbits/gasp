@@ -24,3 +24,4 @@ jakarta-persistence-api = { module = "jakarta.persistence:jakarta.persistence-ap
 micronaut-data-model = { module = "io.micronaut.data:micronaut-data-model", version.ref = "micronaut-data" }
 micronaut-graphql = { module = "io.micronaut.graphql:micronaut-graphql", version.ref = "micronaut-graphql" }
 spring-graphql = { module = "org.springframework.graphql:spring-graphql", version.ref = "spring-graphql" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }

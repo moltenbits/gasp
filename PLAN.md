@@ -40,8 +40,8 @@
   - [9.6 Type-Level Fetcher Wiring](#96-type-level-fetcher-wiring)
 - [10. Phased Implementation](#10-phased-implementation)
   - [10.1 Phase 1 — Foundation, Framework Adapters, and Basic Type Mapping (COMPLETE)](#101-phase-1--foundation-framework-adapters-and-basic-type-mapping-complete)
-  - [10.2 Phase 2 — Entity Type Mapping & Type-Level Fetchers](#102-phase-2--entity-type-mapping--type-level-fetchers)
-  - [10.3 Phase 3 — jOOQ Integration](#103-phase-3--jooq-integration)
+  - [10.2 Phase 2 — GraphQL Type System & Type-Level Fetchers (COMPLETE)](#102-phase-2--graphql-type-system--type-level-fetchers-complete)
+  - [10.3 Phase 3 — Entity Mapping & jOOQ Integration](#103-phase-3--entity-mapping--jooq-integration)
   - [10.4 Phase 4 — Advanced Features](#104-phase-4--advanced-features)
 - [11. Open Questions](#11-open-questions)
 - [12. Build Configuration](#12-build-configuration)
@@ -891,68 +891,82 @@ No manual fetcher registration is needed — the processor discovers and wires e
 - `gasp-spring` module — `GaspGraphQlAutoConfiguration` providing `GraphQlSource` bean
 - `@GraphQLApi` + `@GraphQLQuery`/`@GraphQLMutation`/`@GraphQLSubscription` → SDL + DataFetcher generation
 - `@GraphQLType` scanning → object type SDL generation from getters, public fields, record components
-- `@GraphQLArgument` → argument wiring with correct numeric type coercion (uses actual Java type)
+- Argument wiring with correct numeric type coercion (uses actual Java type)
 - `DataFetchingEnvironment` pass-through — service methods can accept `env` for custom fetching
 - JSpecify `@NonNull`/`@Nullable` interop (TYPE_USE annotation handling)
 - JPA `@Entity` and Micronaut `@MappedEntity` recognized as `@GraphQLType` equivalents
 - Generated classes annotated `@Named @Singleton` for both Micronaut and Spring DI discovery
 - `buildSrc` convention plugins: `gasp.base`, `gasp.micronaut`, `gasp.spring`
-- `examples/micronaut-example` — working Micronaut 5 app with 10 integration tests
-- `examples/spring-example` — working Spring Boot 4 app with 10 integration tests
-- 128 total tests across all modules
+- `examples/micronaut-example` and `examples/spring-example` — working apps with integration tests
 
-**What works after Phase 1:**
+### 10.2 Phase 2 — GraphQL Type System & Type-Level Fetchers (COMPLETE)
+
+**Goal:** Full GraphQL type system support: input types, enums, interfaces. Type-level field resolution. Compile-time input type conversion. Optional `@GraphQLArgument`.
+
+**Delivered:**
+- `@GraphQLEnum` → standalone enum type scanning and SDL generation (not just tracked from operations)
+- `@GraphQLInputType` → input type scanning, `input` SDL generation, and compile-time map-to-POJO conversion via generated `InputConverterGenerator` (no reflection)
+- `@GraphQLInterface` → interface type scanning, `interface` SDL generation, automatic `implements` detection on object types, default `TypeResolver` for runtime resolution
+- `@GraphQLField(on = Type.class)` → type-level DataFetcher generation and registry wiring from methods on any class (not just `@GraphQLApi`), with `MirroredTypeException` handling
+- `@GraphQLArgument` is now optional — argument names are derived from Java parameter names; `@GraphQLArgument` only needed to override the name or add description/default value
+- `ComposableQuery<T>` marker interface in `gasp-runtime`
+- `InputRef` variant added to `GraphQLTypeRef` sealed interface
+- `InputTypeModel`, `InterfaceTypeModel`, `TypeFetcherModel` records in processor model
+- Enum argument coercion via `Enum.valueOf()` in generated code
+- Non-java.lang argument type imports in generated DataFetchers
+- Default `TypeResolver` via `WiringFactory` for interface/union type resolution by class simple name
+- Example projects updated with `Genre` enum, `Searchable` interface, `BookInput` input type, `RecommendationService` type-level fetcher, and `booksByGenre` enum query
+- 143 total tests across all modules
+
+**What works after Phase 2:**
 
 ```java
+@GraphQLEnum
+public enum Genre { FICTION, FANTASY, SCIENCE_FICTION, MYSTERY }
+
+@GraphQLInterface
+public interface Searchable { String getTitle(); String getDescription(); }
+
+@GraphQLInputType
+public class BookInput { /* title, authorName, genre with getters/setters */ }
+
 @GraphQLType
-public class Book {
-    private final Long id;
-    private final String title;
-    private final Author author;
-    // getters...
+public class Book implements Searchable {
+    // id, title, description, author, genre with getters
 }
 
 @GraphQLApi
-@Singleton // or @Service for Spring
+@Singleton
 public class BookService {
     @GraphQLQuery
-    public Book book(@GraphQLArgument(name = "id") Long id) { ... }
+    public Book book(Long id) { ... }                    // no @GraphQLArgument needed
 
     @GraphQLQuery
-    public List<Book> books() { ... }
+    public List<Book> booksByGenre(Genre genre) { ... }  // enum argument
 
     @GraphQLMutation
-    public Book createBook(@GraphQLArgument(name = "title") String title) { ... }
+    public Book createBook(BookInput input) { ... }      // input type argument
+}
+
+@Singleton
+public class RecommendationService {
+    @GraphQLField(on = Book.class)                       // type-level fetcher
+    public List<Book> recommendations(Object source) { ... }
 }
 ```
-→ Generates SDL with object types, Query, and Mutation. DataFetchers wire automatically via DI. The `/graphql` endpoint works in both Micronaut and Spring Boot with zero additional configuration.
+→ Generates SDL with object types, input types, interfaces, enums, type-level fields, and operations. Input type arguments are converted from maps at compile time. All wiring is automatic.
 
-### 10.2 Phase 2 — Entity Type Mapping & Type-Level Fetchers
+### 10.3 Phase 3 — Entity Mapping & jOOQ Integration
 
-**Goal:** Expand type mapping with input types, enums, interfaces, and `@MappedEntity` field-level annotation support. Add type-level field resolution via `@GraphQLField(on = ...)`.
+**Goal:** ORM-aware entity mapping and `ComposableQuery<T>` implementation backed by jOOQ. The framework composes query objects returned by fetchers across the type hierarchy into a single optimized SQL query.
 
 **Deliverables:**
 - `@MappedEntity` / `@Entity` → automatic field scanning with JPA/Micronaut Data annotation support at the field level (`@Column(nullable = false)` → `NonNull`, `@Transient` → ignored, `@OneToMany`/`@ManyToOne` → relation)
-- `@GraphQLField(on = Type.class)` on methods → type-level DataFetcher generation and wiring
-- `@GraphQLInputType` generation (auto-generate input variants of entity types)
-- `@GraphQLEnum` / Java enum → GraphQL enum type generation (currently only tracked for operations)
-- `@GraphQLInterface` support
 - FieldMapping class generation (GraphQL name → Java field → column name)
-- `ComposableQuery<T>` interface in `gasp-runtime` — marker for composable query objects
-- Generated DataFetchers detect `ComposableQuery` return types vs concrete objects
-- Validation: compile-time error messages for common type mapping mistakes
-
-**What works after Phase 2:**
-JPA/Micronaut Data entities auto-map fields with annotation-driven nullability, relations, and ignored fields. Type-level field resolvers can be defined with `@GraphQLField(on = ...)`. Methods returning `ComposableQuery<T>` are recognized as composable.
-
-### 10.3 Phase 3 — jOOQ Integration
-
-**Goal:** `ComposableQuery<T>` implementation backed by jOOQ. The framework composes query objects returned by fetchers across the type hierarchy into a single optimized SQL query.
-
-**Deliverables:**
 - `gasp-jooq` module
 - `JooqComposableQuery<T>` — `ComposableQuery<T>` implementation backed by jOOQ's `SelectConditionStep`
 - Framework composition engine: merges `ComposableQuery` objects from parent and child fetchers into a single query with appropriate joins, column selection, and where clauses
+- Generated DataFetchers detect `ComposableQuery` return types vs concrete objects
 - Selection set awareness: only SELECT requested columns, only JOIN requested relations
 - Generated FieldMapping → jOOQ Field resolution
 - Support for `@GraphQLRelation` on entity fields
@@ -998,9 +1012,9 @@ Queries from multiple levels compose into a single SQL statement whenever possib
 
 ## 11. Open Questions
 
-1. **Record support:** Java records are great for GraphQL types. Should the processor handle records as first-class types (use record components instead of getters)?
+1. ~~**Record support:**~~ **Resolved.** The processor handles records as first-class types via record component scanning.
 
-2. **Input type generation strategy:** Auto-generate an `XxxInput` for every `@GraphQLType`? Or require explicit `@GraphQLInputType`? Or generate on demand when an `@GraphQLMutation` takes that type as an argument?
+2. ~~**Input type generation strategy:**~~ **Resolved.** Explicit `@GraphQLInputType` is required. The processor generates a compile-time converter class (no reflection) for map-to-POJO conversion when used as a mutation argument.
 
 3. **jOOQ codegen ordering:** jOOQ generates from the database schema; GASP generates from Java annotations. These are independent build phases. Do we need to coordinate them, or do they just both contribute to the final compilation?
 

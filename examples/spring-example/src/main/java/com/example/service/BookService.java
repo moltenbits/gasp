@@ -8,6 +8,7 @@ import com.moltenbits.gasp.annotation.GraphQLApi;
 import com.moltenbits.gasp.annotation.GraphQLArgument;
 import com.moltenbits.gasp.annotation.GraphQLMutation;
 import com.moltenbits.gasp.annotation.GraphQLQuery;
+import graphql.schema.DataFetchingEnvironment;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,7 +31,7 @@ public class BookService {
     }
 
     @GraphQLQuery
-    public Book book(@GraphQLArgument(name = "id") Long id) {
+    public Book book(Long id) {
         return books.stream()
                 .filter(b -> b.getId().equals(id))
                 .findFirst()
@@ -42,15 +43,25 @@ public class BookService {
         return List.copyOf(books);
     }
 
+    // No @GraphQLArgument — derives "genre" from parameter name
     @GraphQLQuery
-    public List<Book> booksByGenre(@GraphQLArgument(name = "genre") Genre genre) {
+    public List<Book> booksByGenre(Genre genre) {
         return books.stream()
                 .filter(b -> b.getGenre() == genre)
                 .toList();
     }
 
+    @GraphQLQuery
+    public String debug(DataFetchingEnvironment env) {
+        var fields = env.getSelectionSet().getImmediateFields().stream()
+                .map(f -> f.getName())
+                .toList();
+        return "Requested fields: " + fields;
+    }
+
+    // Uses @GraphQLArgument to rename "input" to "book" in the schema
     @GraphQLMutation
-    public Book createBook(@GraphQLArgument(name = "input") BookInput input) {
+    public Book createBook(@GraphQLArgument(name = "book") BookInput input) {
         var author = new Author(idCounter.getAndIncrement(), input.getAuthorName());
         var genre = input.getGenre() != null ? input.getGenre() : Genre.FICTION;
         var book = new Book(idCounter.getAndIncrement(), input.getTitle(), "", author, genre);

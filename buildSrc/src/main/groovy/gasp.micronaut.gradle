@@ -25,8 +25,9 @@ dependencies {
     implementation project(':gasp-annotations')
     implementation project(':gasp-micronaut')
     implementation 'io.micronaut.serde:micronaut-serde-jackson'
+    implementation libs.jspecify
 
-    runtimeOnly "ch.qos.logback:logback-classic:${libs.versions.logback.get()}"
+    runtimeOnly libs.logback.classic
     runtimeOnly 'org.yaml:snakeyaml'
 
     testImplementation 'io.micronaut:micronaut-http-client'

@@ -55,7 +55,7 @@ class BookServiceSpec extends Specification {
         result.data.books.every { !it.containsKey("author") }
     }
 
-    // --- Query: book ---
+    // --- Query: book (uses @GraphQLArgument to rename "id" to "bookId") ---
 
     def "book query returns a single book by id"() {
         when:
@@ -84,11 +84,11 @@ class BookServiceSpec extends Specification {
         result.data.book.author.name == "George Orwell"
     }
 
-    // --- Mutation: createBook ---
+    // --- Mutation: createBook (uses @GraphQLArgument to rename "input" to "book") ---
 
-    def "createBook mutation with input type adds a book"() {
+    def "createBook mutation uses renamed argument"() {
         when:
-        def result = graphql('mutation { createBook(input: { title: "Dune", authorName: "Frank Herbert", genre: SCIENCE_FICTION }) { id title author { name } genre } }')
+        def result = graphql('mutation { createBook(book: { title: "Dune", authorName: "Frank Herbert", genre: SCIENCE_FICTION }) { id title author { name } genre } }')
 
         then:
         result.data.createBook.title == "Dune"
@@ -97,9 +97,18 @@ class BookServiceSpec extends Specification {
         result.data.createBook.id != null
     }
 
+    def "createBook mutation with original param name returns error"() {
+        when:
+        def result = graphql('mutation { createBook(input: { title: "Test" }) { id } }')
+
+        then:
+        result.errors != null
+        result.errors.size() > 0
+    }
+
     def "createBook mutation with input type defaults genre when omitted"() {
         when:
-        def result = graphql('mutation { createBook(input: { title: "Sapiens", authorName: "Yuval Harari" }) { title genre } }')
+        def result = graphql('mutation { createBook(book: { title: "Sapiens", authorName: "Yuval Harari" }) { title genre } }')
 
         then:
         result.data.createBook.title == "Sapiens"
@@ -108,7 +117,7 @@ class BookServiceSpec extends Specification {
 
     def "createBook mutation is visible in subsequent books query"() {
         when:
-        graphql('mutation { createBook(input: { title: "Neuromancer", authorName: "William Gibson", genre: SCIENCE_FICTION }) { id } }')
+        graphql('mutation { createBook(book: { title: "Neuromancer", authorName: "William Gibson", genre: SCIENCE_FICTION }) { id } }')
         def result = graphql('{ books { title } }')
 
         then:
@@ -168,6 +177,27 @@ class BookServiceSpec extends Specification {
         then:
         result.data.book.title == "The Hobbit"
         result.data.book.description == "A hobbit's adventure"
+    }
+
+    // --- DataFetchingEnvironment pass-through ---
+
+    def "debug query receives DataFetchingEnvironment"() {
+        when:
+        def result = graphql('{ debug }')
+
+        then:
+        result.data.debug != null
+        result.data.debug.startsWith("Requested fields:")
+    }
+
+    // --- JSpecify @NonNull ---
+
+    def "author name is non-null via JSpecify @NonNull"() {
+        when:
+        def result = graphql('{ book(id: 1) { author { name } } }')
+
+        then:
+        result.data.book.author.name == "J.R.R. Tolkien"
     }
 
     // --- Schema validation ---

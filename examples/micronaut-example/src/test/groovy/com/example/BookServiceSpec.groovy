@@ -168,6 +168,27 @@ class BookServiceSpec extends Specification {
         result.data.book.description == "A hobbit's adventure"
     }
 
+    // --- DataFetchingEnvironment pass-through ---
+
+    def "debug query receives DataFetchingEnvironment"() {
+        when:
+        def result = graphql('{ debug }')
+
+        then:
+        result.data.debug != null
+        result.data.debug.startsWith("Requested fields:")
+    }
+
+    // --- JSpecify @NonNull ---
+
+    def "author name is non-null via JSpecify @NonNull"() {
+        when:
+        def result = graphql('{ book(id: 1) { author { name } } }')
+
+        then:
+        result.data.book.author.name == "J.R.R. Tolkien"
+    }
+
     // --- Schema validation ---
 
     def "graphql endpoint returns errors for invalid query"() {
