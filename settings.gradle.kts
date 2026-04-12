@@ -8,5 +8,5 @@ pluginManagement {
 
 rootProject.name = "gasp"
 
-include("gasp-annotations", "gasp-processor", "gasp-runtime", "gasp-micronaut", "gasp-spring")
-include("examples:micronaut-example", "examples:spring-example")
+include("gasp-annotations", "gasp-processor", "gasp-runtime", "gasp-micronaut", "gasp-spring", "gasp-jooq")
+include("examples:micronaut-example", "examples:spring-example", "examples:jooq-example")

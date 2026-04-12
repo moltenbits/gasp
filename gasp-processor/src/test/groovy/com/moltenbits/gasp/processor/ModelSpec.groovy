@@ -81,6 +81,7 @@ class ModelSpec extends Specification {
             "findUser",
             "Find a user by ID",
             new GraphQLTypeRef.ObjectRef("User"),
+            false,
             "com.example.UserService",
             "findUser",
             [arg1, arg2],
@@ -117,7 +118,7 @@ class ModelSpec extends Specification {
         FieldModel              | new FieldModel("email", "email", new GraphQLTypeRef.Scalar("String"), true, false, "Email").toString()| "email"
         ObjectTypeModel         | new ObjectTypeModel("User", "com.example.User", "A user", []).toString()                             | "User"
         EnumTypeModel           | new EnumTypeModel("Status", "com.example.Status", ["ACTIVE", "INACTIVE"]).toString()                  | "ACTIVE"
-        OperationModel          | new OperationModel(OperationKind.MUTATION, "createUser", "Create", new GraphQLTypeRef.ObjectRef("User"), "Svc", "create", [], -1).toString() | "createUser"
+        OperationModel          | new OperationModel(OperationKind.MUTATION, "createUser", "Create", new GraphQLTypeRef.ObjectRef("User"), false, "Svc", "create", [], -1).toString() | "createUser"
         SchemaModel             | new SchemaModel([], [], [], [], [], [], [], []).toString()                                                        | "SchemaModel"
     }
 }

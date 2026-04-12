@@ -135,6 +135,16 @@ public class TypeResolver {
             return maybeNonNull(ref, annotatedElement, type);
         }
 
+        // Check ComposableQuery implementations → unwrap type argument
+        // JooqComposableQuery<Book> → ObjectRef("Book")
+        // JooqComposableQuery<List<Book>> → ListOf(ObjectRef("Book"))
+        if (isComposableQuery(typeElement)) {
+            List<? extends TypeMirror> typeArgs = type.getTypeArguments();
+            if (typeArgs.isEmpty()) return null;
+            // The inner type could be List<X>, which resolve() handles as ListOf
+            return resolve(typeArgs.get(0), annotatedElement);
+        }
+
         // Check Optional (strips nullability)
         if (qualifiedName.equals("java.util.Optional")) {
             List<? extends TypeMirror> typeArgs = type.getTypeArguments();
@@ -191,6 +201,28 @@ public class TypeResolver {
 
         // Fallback: treat any class as an ObjectRef (may be user-defined type)
         return maybeNonNull(new GraphQLTypeRef.ObjectRef(typeElement.getSimpleName().toString()), annotatedElement, type);
+    }
+
+    private boolean isComposableQuery(TypeElement typeElement) {
+        String qualifiedName = typeElement.getQualifiedName().toString();
+        if (qualifiedName.equals("com.moltenbits.gasp.runtime.ComposableQuery")) return true;
+        // Check interfaces
+        for (TypeMirror iface : typeElement.getInterfaces()) {
+            if (iface.toString().startsWith("com.moltenbits.gasp.runtime.ComposableQuery")) return true;
+            if (iface instanceof DeclaredType dt) {
+                TypeElement ifaceElement = (TypeElement) dt.asElement();
+                if (isComposableQuery(ifaceElement)) return true;
+            }
+        }
+        // Check superclass
+        TypeMirror superclass = typeElement.getSuperclass();
+        if (superclass instanceof DeclaredType dt) {
+            TypeElement superElement = (TypeElement) dt.asElement();
+            if (!superElement.getQualifiedName().toString().equals("java.lang.Object")) {
+                if (isComposableQuery(superElement)) return true;
+            }
+        }
+        return false;
     }
 
     private boolean isKnownEntityType(TypeElement typeElement) {

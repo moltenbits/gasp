@@ -302,7 +302,34 @@ public class Collector {
         return null;
     }
 
+    private static final String COMPOSABLE_QUERY = "com.moltenbits.gasp.runtime.ComposableQuery";
     private static final String DATA_FETCHING_ENVIRONMENT = "graphql.schema.DataFetchingEnvironment";
+
+    private boolean isComposableQueryReturn(javax.lang.model.type.TypeMirror returnType) {
+        if (returnType instanceof javax.lang.model.type.DeclaredType dt) {
+            TypeElement te = (TypeElement) dt.asElement();
+            return isOrImplements(te, COMPOSABLE_QUERY);
+        }
+        return false;
+    }
+
+    private boolean isOrImplements(TypeElement typeElement, String qualifiedName) {
+        if (typeElement.getQualifiedName().toString().equals(qualifiedName)) return true;
+        for (javax.lang.model.type.TypeMirror iface : typeElement.getInterfaces()) {
+            if (iface.toString().startsWith(qualifiedName)) return true;
+            if (iface instanceof javax.lang.model.type.DeclaredType dt) {
+                if (isOrImplements((TypeElement) dt.asElement(), qualifiedName)) return true;
+            }
+        }
+        javax.lang.model.type.TypeMirror superclass = typeElement.getSuperclass();
+        if (superclass instanceof javax.lang.model.type.DeclaredType dt) {
+            TypeElement superElement = (TypeElement) dt.asElement();
+            if (!superElement.getQualifiedName().toString().equals("java.lang.Object")) {
+                if (isOrImplements(superElement, qualifiedName)) return true;
+            }
+        }
+        return false;
+    }
 
     private OperationModel buildOperation(OperationKind kind, String annotationName,
                                            String description, ExecutableElement method,
@@ -313,6 +340,8 @@ public class Collector {
 
         GraphQLTypeRef returnType = typeResolver.resolve(method.getReturnType(), method);
         trackEnums(returnType, method.getReturnType());
+
+        boolean returnsComposableQuery = isComposableQueryReturn(method.getReturnType());
 
         int envParameterIndex = -1;
         int paramIndex = 0;
@@ -344,7 +373,7 @@ public class Collector {
                     cleanParamType, argType, argDefault));
         }
 
-        return new OperationModel(kind, graphQLName, description, returnType,
+        return new OperationModel(kind, graphQLName, description, returnType, returnsComposableQuery,
                 serviceClass, method.getSimpleName().toString(), arguments, envParameterIndex);
     }
 

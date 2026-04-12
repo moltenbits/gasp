@@ -10,6 +10,9 @@ micronaut-graphql = "5.0.0-M1"
 micronaut-gradle = "5.0.0-M1"
 spring-boot = "4.0.5"
 spring-graphql = "2.0.2"
+jooq = "3.21.1"
+h2 = "2.4.240"
+flyway = "12.3.0"
 logback = "1.5.18"
 
 [libraries]
@@ -24,4 +27,8 @@ jakarta-persistence-api = { module = "jakarta.persistence:jakarta.persistence-ap
 micronaut-data-model = { module = "io.micronaut.data:micronaut-data-model", version.ref = "micronaut-data" }
 micronaut-graphql = { module = "io.micronaut.graphql:micronaut-graphql", version.ref = "micronaut-graphql" }
 spring-graphql = { module = "org.springframework.graphql:spring-graphql", version.ref = "spring-graphql" }
+jooq = { module = "org.jooq:jooq", version.ref = "jooq" }
+jooq-codegen = { module = "org.jooq:jooq-codegen", version.ref = "jooq" }
+h2 = { module = "com.h2database:h2", version.ref = "h2" }
+flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }

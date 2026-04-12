@@ -87,7 +87,11 @@ public class DataFetcherGenerator {
         }
 
         // Call service method — interleave env at its original position
-        sb.append("        return service.").append(op.methodName()).append("(");
+        if (op.returnsComposableQuery()) {
+            sb.append("        var query = service.").append(op.methodName()).append("(");
+        } else {
+            sb.append("        return service.").append(op.methodName()).append("(");
+        }
         int argIndex = 0;
         int totalParams = op.arguments().size() + (op.passEnvironment() ? 1 : 0);
         for (int i = 0; i < totalParams; i++) {
@@ -99,6 +103,9 @@ public class DataFetcherGenerator {
             }
         }
         sb.append(");\n");
+        if (op.returnsComposableQuery()) {
+            sb.append("        return query.isList() ? query.fetchAll() : query.fetchOne();\n");
+        }
         sb.append("    }\n");
         sb.append("}\n");
 

@@ -14,6 +14,7 @@ public record OperationModel(
     String graphQLName,
     String description,
     GraphQLTypeRef returnType,
+    boolean returnsComposableQuery,
     String serviceClass,
     String methodName,
     List<ArgumentModel> arguments,
