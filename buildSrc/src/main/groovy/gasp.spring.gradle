@@ -39,6 +39,7 @@ dependencies {
 
 tasks.withType(Test) {
     useJUnitPlatform()
+    outputs.upToDateWhen { false }
     testLogging {
         events 'passed', 'skipped', 'failed'
         showExceptions = true
