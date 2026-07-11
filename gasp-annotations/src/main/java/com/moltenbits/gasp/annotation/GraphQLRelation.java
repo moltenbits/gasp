@@ -15,4 +15,12 @@ import java.lang.annotation.Target;
 public @interface GraphQLRelation {
 
     Class<?> entity() default void.class;
+
+    /**
+     * Declares this relation as a list (one-to-many or many-to-many).
+     * When true, the generated GraphQL field uses a list type regardless of the
+     * method's return type. This is useful when the return type doesn't directly
+     * indicate list-ness (e.g., jOOQ path methods).
+     */
+    boolean list() default false;
 }
