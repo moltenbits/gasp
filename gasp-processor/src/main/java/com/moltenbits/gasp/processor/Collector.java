@@ -10,8 +10,10 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -39,10 +41,29 @@ public class Collector {
         List<OperationModel> mutations = new ArrayList<>();
         List<OperationModel> subscriptions = new ArrayList<>();
 
-        // Collect @GraphQLType classes
+        // Collect @GraphQLType classes, with subclass-wins deduplication
+        Map<String, TypeElement> typesByName = new java.util.LinkedHashMap<>();
         for (Element element : roundEnv.getElementsAnnotatedWith(GraphQLType.class)) {
             if (element.getKind() != ElementKind.CLASS && element.getKind() != ElementKind.RECORD) continue;
             TypeElement typeElement = (TypeElement) element;
+
+            GraphQLType ann = typeElement.getAnnotation(GraphQLType.class);
+            String graphQLName = (ann != null && !ann.name().isEmpty())
+                    ? ann.name()
+                    : typeElement.getSimpleName().toString();
+
+            TypeElement existing = typesByName.get(graphQLName);
+            if (existing == null) {
+                typesByName.put(graphQLName, typeElement);
+            } else if (isSubclassOf(typeElement, existing)) {
+                // Subclass wins — replace the parent
+                typesByName.put(graphQLName, typeElement);
+            } else if (isSubclassOf(existing, typeElement)) {
+                // Existing is already the subclass — keep it
+            }
+            // else: unrelated classes with the same name — validator will catch this
+        }
+        for (TypeElement typeElement : typesByName.values()) {
             objectTypes.add(buildObjectType(typeElement));
         }
 
@@ -178,6 +199,53 @@ public class Collector {
     }
 
     /**
+     * Check if 'child' is a subclass of 'parent' by walking the superclass chain.
+     */
+    private boolean isSubclassOf(TypeElement child, TypeElement parent) {
+        javax.lang.model.type.TypeMirror superclass = child.getSuperclass();
+        while (superclass.getKind() != javax.lang.model.type.TypeKind.NONE) {
+            if (superclass instanceof javax.lang.model.type.DeclaredType dt) {
+                TypeElement superElement = (TypeElement) dt.asElement();
+                if (superElement.getQualifiedName().equals(parent.getQualifiedName())) {
+                    return true;
+                }
+                superclass = superElement.getSuperclass();
+            } else {
+                break;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if an element has any GASP annotation on it.
+     */
+    private boolean hasGaspAnnotation(Element element) {
+        return element.getAnnotation(GraphQLField.class) != null
+                || element.getAnnotation(GraphQLId.class) != null
+                || element.getAnnotation(GraphQLNonNull.class) != null
+                || element.getAnnotation(GraphQLRelation.class) != null
+                || element.getAnnotation(GraphQLIgnore.class) != null;
+    }
+
+    /**
+     * Resolve the entity type from a @GraphQLRelation annotation.
+     * Returns null if entity is void (unset).
+     */
+    private TypeMirror resolveRelationEntityType(GraphQLRelation relAnn) {
+        if (relAnn == null) return null;
+        try {
+            Class<?> entityClass = relAnn.entity();
+            if (entityClass == void.class) return null;
+            TypeElement te = elements.getTypeElement(entityClass.getCanonicalName());
+            return te != null ? te.asType() : null;
+        } catch (MirroredTypeException mte) {
+            TypeMirror tm = mte.getTypeMirror();
+            return tm.toString().equals("void") ? null : tm;
+        }
+    }
+
+    /**
      * Check if a @GraphQLField annotation has a non-void on() attribute.
      */
     private boolean hasOnAttribute(GraphQLField fieldAnn) {
@@ -197,9 +265,45 @@ public class Collector {
     private List<FieldModel> scanFields(TypeElement typeElement) {
         List<FieldModel> fields = new ArrayList<>();
 
-        for (Element enclosed : typeElement.getEnclosedElements()) {
+        // Check if only explicitly annotated fields should be included
+        GraphQLType typeAnn = typeElement.getAnnotation(GraphQLType.class);
+        boolean explicitOnly = typeAnn != null && typeAnn.explicitFieldsOnly();
+
+        // Collect elements from the class hierarchy — subclass methods override parent methods
+        // Walk from the class up to its supertypes, keeping the first (most-derived) version of each method
+        Map<String, Element> elementsByName = new java.util.LinkedHashMap<>();
+        TypeElement current = typeElement;
+        while (current != null) {
+            for (Element enclosed : current.getEnclosedElements()) {
+                String key = enclosed.getSimpleName().toString();
+                // For methods, include parameter types in the key to handle overloads
+                if (enclosed.getKind() == ElementKind.METHOD) {
+                    ExecutableElement method = (ExecutableElement) enclosed;
+                    key = method.getSimpleName().toString() + "(" +
+                            method.getParameters().stream()
+                                    .map(p -> p.asType().toString())
+                                    .reduce((a, b) -> a + "," + b)
+                                    .orElse("") + ")";
+                }
+                // Only add if not already present (subclass version wins)
+                elementsByName.putIfAbsent(key, enclosed);
+            }
+            // Walk up the superclass chain
+            javax.lang.model.type.TypeMirror superclass = current.getSuperclass();
+            if (superclass.getKind() == javax.lang.model.type.TypeKind.NONE) break;
+            if (!(superclass instanceof javax.lang.model.type.DeclaredType dt)) break;
+            TypeElement superElement = (TypeElement) dt.asElement();
+            // Stop at java.lang.Object
+            if (superElement.getQualifiedName().toString().equals("java.lang.Object")) break;
+            current = superElement;
+        }
+
+        for (Element enclosed : elementsByName.values()) {
             // Skip ignored fields
             if (enclosed.getAnnotation(GraphQLIgnore.class) != null) continue;
+
+            // In explicitFieldsOnly mode, skip elements without any GASP annotation
+            if (explicitOnly && !hasGaspAnnotation(enclosed)) continue;
 
             if (enclosed.getKind() == ElementKind.METHOD) {
                 ExecutableElement method = (ExecutableElement) enclosed;
@@ -209,13 +313,25 @@ public class Collector {
                 GraphQLField fieldAnn = method.getAnnotation(GraphQLField.class);
                 if (fieldAnn != null && hasOnAttribute(fieldAnn)) continue;
 
-                // Only include getter-style methods (getX/isX, no args, non-void)
-                if (method.getParameters().isEmpty()
+                // Only include getter-style methods (getX/isX, non-void, non-static)
+                // Allow methods with only a DataFetchingEnvironment parameter
+                boolean noArgs = method.getParameters().isEmpty();
+                boolean onlyEnvArg = method.getParameters().size() == 1
+                        && method.getParameters().get(0).asType().toString().equals(DATA_FETCHING_ENVIRONMENT);
+
+                if ((noArgs || onlyEnvArg)
                         && method.getReturnType().getKind() != javax.lang.model.type.TypeKind.VOID
                         && !method.getModifiers().contains(Modifier.STATIC)) {
 
                     String fieldName = extractFieldName(methodName);
-                    if (fieldName == null) continue;
+                    if (fieldName == null) {
+                        // Non-getter methods are accepted if they have a GASP annotation
+                        if (hasGaspAnnotation(method)) {
+                            fieldName = methodName;
+                        } else {
+                            continue;
+                        }
+                    }
 
                     // Check for @GraphQLField override
                     if (fieldAnn != null && !fieldAnn.name().isEmpty()) {
@@ -223,10 +339,26 @@ public class Collector {
                     }
                     String fieldDesc = (fieldAnn != null) ? fieldAnn.description() : "";
 
-                    GraphQLTypeRef typeRef = typeResolver.resolve(method.getReturnType(), method);
-                    if (typeRef == null) continue;
-
                     boolean isRelation = enclosed.getAnnotation(GraphQLRelation.class) != null;
+
+                    GraphQLTypeRef typeRef;
+                    if (isRelation) {
+                        GraphQLRelation relAnn = method.getAnnotation(GraphQLRelation.class);
+                        TypeMirror entityType = resolveRelationEntityType(relAnn);
+                        if (entityType != null) {
+                            typeRef = typeResolver.resolve(entityType, method);
+                            if (typeRef == null) continue;
+                            if (relAnn.list()) {
+                                typeRef = new GraphQLTypeRef.ListOf(typeRef);
+                            }
+                        } else {
+                            typeRef = typeResolver.resolve(method.getReturnType(), method);
+                            if (typeRef == null) continue;
+                        }
+                    } else {
+                        typeRef = typeResolver.resolve(method.getReturnType(), method);
+                        if (typeRef == null) continue;
+                    }
 
                     fields.add(new FieldModel(fieldName, methodName, typeRef, true, isRelation, fieldDesc));
                 }
@@ -289,15 +421,15 @@ public class Collector {
      * "getTitle" -> "title", "isActive" -> "active", "name" -> "name"
      */
     private static String extractFieldName(String methodName) {
+        // Skip common Object/class methods first
+        if (methodName.equals("toString") || methodName.equals("hashCode") || methodName.equals("getClass")) {
+            return null;
+        }
         if (methodName.startsWith("get") && methodName.length() > 3 && Character.isUpperCase(methodName.charAt(3))) {
             return Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
         }
         if (methodName.startsWith("is") && methodName.length() > 2 && Character.isUpperCase(methodName.charAt(2))) {
             return Character.toLowerCase(methodName.charAt(2)) + methodName.substring(3);
-        }
-        // Skip common Object methods
-        if (methodName.equals("toString") || methodName.equals("hashCode") || methodName.equals("getClass")) {
-            return null;
         }
         return null;
     }

@@ -276,7 +276,6 @@ class EndToEndSpec extends Specification {
         fetcher.contains('return service.lookup(query)')
     }
 
-    // --- @GraphQLType ---
 
     def "@GraphQLType generates object type SDL from getters"() {
         given:
@@ -340,7 +339,6 @@ class EndToEndSpec extends Specification {
         sdl.contains('author: Author')
     }
 
-    // --- @GraphQLEnum ---
 
     def "@GraphQLEnum generates enum type SDL"() {
         given:
@@ -420,7 +418,6 @@ class EndToEndSpec extends Specification {
         fetcher.contains('env.<String>getArgument("genre")')
     }
 
-    // --- @GraphQLInputType ---
 
     def "@GraphQLInputType generates input type SDL"() {
         given:
@@ -521,7 +518,6 @@ class EndToEndSpec extends Specification {
         fetcher.contains('BookInputConverter.fromMap(')
     }
 
-    // --- @GraphQLInterface ---
 
     def "@GraphQLInterface generates interface SDL and implements clause"() {
         given:
@@ -578,7 +574,6 @@ class EndToEndSpec extends Specification {
         sdl.contains('price: Float!')
     }
 
-    // --- @GraphQLField(on = ...) type-level fetcher ---
 
     def "@GraphQLField(on) generates type-level DataFetcher and SDL field"() {
         given:
@@ -647,6 +642,320 @@ class EndToEndSpec extends Specification {
         then:
         registry.contains('typeFetchers.computeIfAbsent("Book"')
         registry.contains('.put("related"')
+    }
+
+
+    def "subclass @GraphQLType replaces parent with same name"() {
+        given:
+        def parent = JavaFileObjects.forSourceString("test.Animal", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+
+            @GraphQLType
+            public class Animal {
+                private final String species;
+                public Animal(String species) { this.species = species; }
+                public String getSpecies() { return species; }
+                public String getInternalCode() { return "X"; }
+            }
+        ''')
+        def child = JavaFileObjects.forSourceString("test.AnimalSchema", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLIgnore;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+
+            @GraphQLType(name = "Animal")
+            public class AnimalSchema extends Animal {
+                public AnimalSchema() { super(""); }
+
+                @GraphQLIgnore
+                @Override
+                public String getInternalCode() { return null; }
+            }
+        ''')
+        def service = JavaFileObjects.forSourceString("test.Svc", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLApi;
+            import com.moltenbits.gasp.annotation.GraphQLQuery;
+
+            @GraphQLApi
+            public class Svc {
+                @GraphQLQuery
+                public Animal animal() { return null; }
+            }
+        ''')
+
+        when:
+        def result = Compiler.javac()
+                .withProcessors(new GaspProcessor())
+                .compile(parent, child, service)
+
+        then:
+        result.status() == SUCCESS
+
+        when:
+        def sdl = result.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/gasp/schema.graphqls")
+                .get().getCharContent(false).toString()
+
+        then:
+        // Only one type Animal — subclass wins
+        sdl.count('type Animal {') == 1
+        // species is inherited and included
+        sdl.contains('species: String')
+        // internalCode is hidden via @GraphQLIgnore on subclass
+        !sdl.contains('internalCode')
+    }
+
+
+    def "explicitFieldsOnly only includes annotated methods"() {
+        given:
+        def source = JavaFileObjects.forSourceString("test.Widget", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+            import com.moltenbits.gasp.annotation.GraphQLField;
+
+            @GraphQLType(explicitFieldsOnly = true)
+            public class Widget {
+                @GraphQLField
+                public String getName() { return "widget"; }
+
+                public String getSecret() { return "hidden"; }
+
+                public int getCount() { return 0; }
+            }
+        ''')
+        def service = JavaFileObjects.forSourceString("test.Svc", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLApi;
+            import com.moltenbits.gasp.annotation.GraphQLQuery;
+
+            @GraphQLApi
+            public class Svc {
+                @GraphQLQuery
+                public Widget widget() { return null; }
+            }
+        ''')
+
+        when:
+        def result = Compiler.javac()
+                .withProcessors(new GaspProcessor())
+                .compile(source, service)
+
+        then:
+        result.status() == SUCCESS
+
+        when:
+        def sdl = result.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/gasp/schema.graphqls")
+                .get().getCharContent(false).toString()
+
+        then:
+        sdl.contains('type Widget {')
+        sdl.contains('name: String')
+        !sdl.contains('secret')
+        !sdl.contains('count')
+    }
+
+
+    def "getter with DataFetchingEnvironment parameter is included as a field"() {
+        given:
+        def source = JavaFileObjects.forSourceString("test.Thing", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+            import com.moltenbits.gasp.annotation.GraphQLField;
+            import graphql.schema.DataFetchingEnvironment;
+
+            @GraphQLType(explicitFieldsOnly = true)
+            public class Thing {
+                @GraphQLField
+                public String getLabel(DataFetchingEnvironment env) { return "dynamic"; }
+
+                @GraphQLField
+                public int getSize() { return 0; }
+            }
+        ''')
+        def service = JavaFileObjects.forSourceString("test.Svc", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLApi;
+            import com.moltenbits.gasp.annotation.GraphQLQuery;
+
+            @GraphQLApi
+            public class Svc {
+                @GraphQLQuery
+                public Thing thing() { return null; }
+            }
+        ''')
+
+        when:
+        def result = Compiler.javac()
+                .withProcessors(new GaspProcessor())
+                .compile(source, service)
+
+        then:
+        result.status() == SUCCESS
+
+        when:
+        def sdl = result.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/gasp/schema.graphqls")
+                .get().getCharContent(false).toString()
+
+        then:
+        sdl.contains('label: String')
+        sdl.contains('size: Int!')
+    }
+
+    def "record-style annotated accessors are accepted"() {
+        given:
+        def source = JavaFileObjects.forSourceString("test.Gadget", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+            import com.moltenbits.gasp.annotation.GraphQLField;
+            import com.moltenbits.gasp.annotation.GraphQLId;
+
+            @GraphQLType(explicitFieldsOnly = true)
+            public class Gadget {
+                @GraphQLId
+                @GraphQLField
+                public Long id() { return null; }
+
+                @GraphQLField
+                public String title() { return null; }
+
+                @GraphQLField
+                public int weight() { return 0; }
+            }
+        ''')
+        def service = JavaFileObjects.forSourceString("test.Svc", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLApi;
+            import com.moltenbits.gasp.annotation.GraphQLQuery;
+
+            @GraphQLApi
+            public class Svc {
+                @GraphQLQuery
+                public Gadget gadget() { return null; }
+            }
+        ''')
+
+        when:
+        def result = Compiler.javac()
+                .withProcessors(new GaspProcessor())
+                .compile(source, service)
+
+        then:
+        result.status() == SUCCESS
+
+        when:
+        def sdl = result.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/gasp/schema.graphqls")
+                .get().getCharContent(false).toString()
+
+        then:
+        sdl.contains('type Gadget {')
+        sdl.contains('id: ID')
+        sdl.contains('title: String')
+        sdl.contains('weight: Int!')
+    }
+
+    def "unannotated non-getter methods are not included"() {
+        given:
+        def source = JavaFileObjects.forSourceString("test.Box", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+            import com.moltenbits.gasp.annotation.GraphQLField;
+
+            @GraphQLType
+            public class Box {
+                @GraphQLField
+                public String label() { return null; }
+
+                public String compute() { return null; }
+
+                public void process() {}
+            }
+        ''')
+        def service = JavaFileObjects.forSourceString("test.Svc", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLApi;
+            import com.moltenbits.gasp.annotation.GraphQLQuery;
+
+            @GraphQLApi
+            public class Svc {
+                @GraphQLQuery
+                public Box box() { return null; }
+            }
+        ''')
+
+        when:
+        def result = Compiler.javac()
+                .withProcessors(new GaspProcessor())
+                .compile(source, service)
+
+        then:
+        result.status() == SUCCESS
+
+        when:
+        def sdl = result.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/gasp/schema.graphqls")
+                .get().getCharContent(false).toString()
+
+        then:
+        sdl.contains('label: String')
+        !sdl.contains('compute')
+        !sdl.contains('process')
+    }
+
+    def "@GraphQLRelation with entity resolves type from annotation"() {
+        given:
+        def tag = JavaFileObjects.forSourceString("test.Tag", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+            import com.moltenbits.gasp.annotation.GraphQLField;
+
+            @GraphQLType
+            public class Tag {
+                @GraphQLField
+                public String getName() { return null; }
+            }
+        ''')
+        def item = JavaFileObjects.forSourceString("test.Item", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLType;
+            import com.moltenbits.gasp.annotation.GraphQLField;
+            import com.moltenbits.gasp.annotation.GraphQLRelation;
+
+            @GraphQLType(explicitFieldsOnly = true)
+            public class Item {
+                @GraphQLField
+                public String title() { return null; }
+
+                @GraphQLRelation(entity = Tag.class, list = true)
+                public Object tags() { return null; }
+            }
+        ''')
+        def service = JavaFileObjects.forSourceString("test.Svc", '''
+            package test;
+            import com.moltenbits.gasp.annotation.GraphQLApi;
+            import com.moltenbits.gasp.annotation.GraphQLQuery;
+
+            @GraphQLApi
+            public class Svc {
+                @GraphQLQuery
+                public Item item() { return null; }
+            }
+        ''')
+
+        when:
+        def result = Compiler.javac()
+                .withProcessors(new GaspProcessor())
+                .compile(tag, item, service)
+
+        then:
+        result.status() == SUCCESS
+
+        when:
+        def sdl = result.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/gasp/schema.graphqls")
+                .get().getCharContent(false).toString()
+
+        then:
+        sdl.contains('title: String')
+        sdl.contains('tags: [Tag]')
     }
 
     def "SDL is valid GraphQL"() {
