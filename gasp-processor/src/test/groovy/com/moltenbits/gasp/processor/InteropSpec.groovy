@@ -11,7 +11,6 @@ import static com.google.testing.compile.Compilation.Status.SUCCESS
 
 class InteropSpec extends Specification {
 
-    // --- JSpecify ---
 
     def "@NonNull from JSpecify produces non-null type in SDL"() {
         given:
@@ -120,7 +119,6 @@ class InteropSpec extends Specification {
         sdl.contains('alwaysNonNull: String!')
     }
 
-    // --- JPA ---
 
     def "@Entity from JPA is treated as @GraphQLType for return type resolution"() {
         given:
@@ -170,7 +168,6 @@ class InteropSpec extends Specification {
         sdl.contains('book(id: String): Book')
     }
 
-    // --- Micronaut Data ---
 
     def "@MappedEntity from Micronaut Data is treated as @GraphQLType for return type resolution"() {
         given:

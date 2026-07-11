@@ -23,7 +23,6 @@ class ScalarDefinitionsSpec extends Specification {
     def locale = Locale.US
     def variables = CoercedVariables.emptyVariables()
 
-    // --- DATE scalar: serialize ---
 
     def "DATE serialize formats LocalDate as ISO string"() {
         expect:
@@ -38,7 +37,6 @@ class ScalarDefinitionsSpec extends Specification {
         thrown(CoercingSerializeException)
     }
 
-    // --- DATE scalar: parseValue ---
 
     def "DATE parseValue parses ISO date string"() {
         expect:
@@ -53,7 +51,6 @@ class ScalarDefinitionsSpec extends Specification {
         thrown(CoercingParseValueException)
     }
 
-    // --- DATE scalar: parseLiteral ---
 
     def "DATE parseLiteral parses StringValue"() {
         expect:
@@ -82,7 +79,6 @@ class ScalarDefinitionsSpec extends Specification {
         thrown(CoercingParseLiteralException)
     }
 
-    // --- DATE_TIME scalar: serialize ---
 
     def "DATE_TIME serialize formats LocalDateTime"() {
         expect:
@@ -124,7 +120,6 @@ class ScalarDefinitionsSpec extends Specification {
         thrown(CoercingSerializeException)
     }
 
-    // --- DATE_TIME scalar: parseValue ---
 
     def "DATE_TIME parseValue parses OffsetDateTime string first"() {
         when:
@@ -152,7 +147,6 @@ class ScalarDefinitionsSpec extends Specification {
         thrown(CoercingParseValueException)
     }
 
-    // --- DATE_TIME scalar: parseLiteral ---
 
     def "DATE_TIME parseLiteral parses OffsetDateTime StringValue first"() {
         when:

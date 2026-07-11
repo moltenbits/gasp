@@ -7,7 +7,6 @@ import spock.lang.Unroll
 
 class ModelSpec extends Specification {
 
-    // --- GraphQLTypeRef sealed variants ---
 
     @Unroll
     def "GraphQLTypeRef.#variant.simpleName can be constructed"() {
@@ -54,7 +53,6 @@ class ModelSpec extends Specification {
         new GraphQLTypeRef.EnumRef("Status") != new GraphQLTypeRef.EnumRef("Role")
     }
 
-    // --- SchemaModel ---
 
     def "SchemaModel can be constructed with empty lists"() {
         when:
@@ -68,7 +66,6 @@ class ModelSpec extends Specification {
         schema.subscriptions() == []
     }
 
-    // --- OperationModel ---
 
     def "OperationModel can be constructed with arguments"() {
         given:
@@ -100,7 +97,6 @@ class ModelSpec extends Specification {
         op.arguments()[1] == arg2
     }
 
-    // --- toString output ---
 
     @Unroll
     def "#recordType.simpleName toString contains field values"() {

@@ -24,7 +24,6 @@ class BookServiceSpec extends Specification {
                 .body(Map)
     }
 
-    // --- Query: books ---
 
     def "books query returns all books"() {
         when:
@@ -55,7 +54,6 @@ class BookServiceSpec extends Specification {
         result.data.books.every { !it.containsKey("author") }
     }
 
-    // --- Query: book (uses @GraphQLArgument to rename "id" to "bookId") ---
 
     def "book query returns a single book by id"() {
         when:
@@ -84,7 +82,6 @@ class BookServiceSpec extends Specification {
         result.data.book.author.name == "George Orwell"
     }
 
-    // --- Mutation: createBook (uses @GraphQLArgument to rename "input" to "book") ---
 
     def "createBook mutation uses renamed argument"() {
         when:
@@ -124,7 +121,6 @@ class BookServiceSpec extends Specification {
         result.data.books*.title.contains("Neuromancer")
     }
 
-    // --- Enum: booksByGenre ---
 
     def "booksByGenre query filters by enum value"() {
         when:
@@ -149,7 +145,6 @@ class BookServiceSpec extends Specification {
         result.data.book.genre == "FANTASY"
     }
 
-    // --- Type-level fetcher: recommendations ---
 
     def "book has recommendations from type-level fetcher"() {
         when:
@@ -169,7 +164,6 @@ class BookServiceSpec extends Specification {
         result.data.book.recommendations.size() == 0
     }
 
-    // --- Interface: Searchable ---
 
     def "book has description field from Searchable interface"() {
         when:
@@ -179,7 +173,6 @@ class BookServiceSpec extends Specification {
         result.data.book.description == "A hobbit's adventure"
     }
 
-    // --- DataFetchingEnvironment pass-through ---
 
     def "debug query receives DataFetchingEnvironment"() {
         when:
@@ -190,7 +183,6 @@ class BookServiceSpec extends Specification {
         result.data.debug.startsWith("Requested fields:")
     }
 
-    // --- JSpecify @NonNull ---
 
     def "author name is non-null via JSpecify @NonNull"() {
         when:
@@ -200,7 +192,6 @@ class BookServiceSpec extends Specification {
         result.data.book.author.name == "J.R.R. Tolkien"
     }
 
-    // --- Schema validation ---
 
     def "graphql endpoint returns errors for invalid query"() {
         when:
