@@ -44,7 +44,8 @@
   - [10.3 Phase 3 — Entity Mapping & jOOQ Integration](#103-phase-3--entity-mapping--jooq-integration)
   - [10.4 Phase 4 — Advanced Features](#104-phase-4--advanced-features)
 - [11. Open Questions](#11-open-questions)
-- [12. Build Configuration](#12-build-configuration)
+- [12. Future Test Coverage](#12-future-test-coverage)
+- [13. Build Configuration](#13-build-configuration)
 
 ---
 
@@ -1033,7 +1034,25 @@ Queries from multiple levels compose into a single SQL statement whenever possib
 
 ---
 
-## 12. Build Configuration
+## 12. Future Test Coverage
+
+Items that need test coverage as the framework matures:
+
+- **Embedded/composite ID serialization and deserialization** — how `@GraphQLId` interacts with embedded ID types (e.g., JPA `@EmbeddedId`, jOOQ composite PKs). Correct round-tripping through GraphQL's `ID` scalar.
+- **Record-style accessor resolution** — processor correctly handles `title()` vs `getTitle()` naming on annotated methods, including edge cases with method name collisions
+- **`@GraphQLRelation(entity, list)` type resolution** — processor resolves GraphQL type from the annotation's entity attribute (not the method return type) when the return type is opaque (e.g., jOOQ path types)
+- **Subclass-wins deduplication with deep hierarchies** — more than two levels of inheritance, diamond patterns, multiple unrelated classes with the same `@GraphQLType(name = ...)`
+- **jOOQ generator reserved method conflicts** — all `RESERVED_METHODS` entries produce correct `@GraphQLField(name = "...")` with renamed accessors
+- **Nullability edge cases** — interaction between `@GraphQLNonNull`, JSpecify `@NonNull`/`@Nullable`, and `@GraphQLId` on the same element; nullable vs non-nullable list elements (`[String]` vs `[String!]`)
+- **Circular relations** — two `@GraphQLType` classes referencing each other via `@GraphQLRelation`; SDL generation should not infinite-loop
+- **`explicitFieldsOnly` inheritance** — subclass with `explicitFieldsOnly = true` extending a parent that also has annotated methods; verify correct inclusion/exclusion across the hierarchy
+- **Input type with enum fields** — `@GraphQLInputType` containing an enum-typed field; correct coercion in generated converter
+- **Multiple `@GraphQLApi` classes** — operations from multiple service classes merged correctly into a single schema
+- **`DataFetchingEnvironment` on type-level fetchers** — `@GraphQLField(on = X.class)` methods with `env` parameter at various positions
+
+---
+
+## 13. Build Configuration
 
 Users add GASP to their project:
 
